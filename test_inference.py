@@ -216,7 +216,7 @@ if __name__ == '__main__':
             correct_py += 1
 
         if (result_c != predict_py[0]):
-            print(f'Mismatch between inference engines C: {result_c} Python: {predict_py[0]} True: {labels[0]} Counter: {counter}')
+            print(f'Mismatch between inference engines found. Preduction C: {result_c} Prediction Python: {predict_py[0]} True: {labels[0]}')
             mismatch +=1
 
         counter += 1
