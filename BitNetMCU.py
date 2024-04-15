@@ -16,19 +16,24 @@ class FCMNIST(nn.Module):
     """
     def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
         super(FCMNIST, self).__init__()
-        
-        self.fc1 = BitLinear(1* 1 * 16 * 16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+
+        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+
         self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
+        # self.dropout = nn.Dropout(0.10)
     def forward(self, x):
         x = x.view(x.size(0), -1)
 
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
-        # x = F.dropout(x, p=0.25) # helps a bit, but training significantly slower
+        # x = self.dropout(x)
+
+        # x = F.relu(self.fc4(x))
         x = self.fcl(x)
         return x
     
@@ -49,6 +54,48 @@ class FCMNIST(nn.Module):
         x4 = self.fcl.activation_quant(self.fcl.weight)
         return x1,x2,x3,x4
 
+class CNNMNIST(nn.Module):
+    """
+    CNN+FC Neural Network for MNIST dataset.
+    16x16 input image, 3 hidden layers with a configurable width.
+
+    @cpldcpu 2024-Aprol-14
+
+    """
+    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
+        super(FCMNIST, self).__init__()
+
+        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+
+        self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+
+        # self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        # self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False, groups=1)
+
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=2, padding=2, bias=False, groups=1)
+
+
+        # self.dropout = nn.Dropout(0.10)
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.conv2(x))        
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view(x.size(0), -1)
+
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        # x = self.dropout(x)
+
+        # x = F.relu(self.fc4(x))
+        x = self.fcl(x)
+        return x
+    
 
 class BitLinear(nn.Linear):
     """
@@ -129,7 +176,9 @@ class BitLinear(nn.Linear):
         """
         if self.WScale=='PerOutput':
             mag = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5)
-            # mag = w.abs().mean(dim=-1, keepdim=True).clamp_(min=1e-5)
+            magmax = mag.max()
+            scalequant = (127.0*mag/magmax).round().clamp_(1,127)
+            # mag = scalequant * magmax / 127.0
         elif self.WScale=='PerTensor':
             mag = w.abs().mean().clamp_(min=1e-5)
         else:
@@ -138,23 +187,31 @@ class BitLinear(nn.Linear):
         if self.QuantType == 'Ternary': # 1.58bits
             scale = 1.0 / mag
             u = (w * scale).round().clamp_(-1, 1) / scale
+        elif self.QuantType == 'Ternary06': # 1 bit
+            scale = 0.6 / mag
+            u = (w * scale).round().clamp_(-1, 1) / scale
+        elif self.QuantType == 'Ternary4': # 1 bit
+            scale = 4 / mag
+            u = (w * scale).round().clamp_(-1, 1) / scale
         elif self.QuantType == 'Binary': # 1 bit
             scale = mag
             e = w.mean()
             u = (w - e).sign() * scale
-        elif self.QuantType == 'BinaryBalanced': # 1 bit, weights are balanced around zero
-            e = w.mean()
-            w0 = w - e
+        elif self.QuantType == 'BinarySym': # 1 bit
             scale = mag
-            u = w0.sign() * scale
+            # e = w.mean()
+            u = w.sign() * scale
+        elif self.QuantType == 'BinarySymHS': # 1 bit
+            scale = mag
+            u = w.sign() * scale * 0.5
+        elif self.QuantType == 'BinarySymDS': # 1 bit
+            scale = mag
+            u = w.sign() * scale * 2.0
         elif self.QuantType == '2bitsym':
-            scale = 2.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
-        elif self.QuantType == '2bit':
             scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-            u = ((w * scale ).round().clamp_(-2, 1) ) / scale
+            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
         elif self.QuantType == '4bitsym':
-            scale = 6.5 / mag # 
+            scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
         elif self.QuantType == '8bit':
             scale = 32.0 / mag
@@ -162,7 +219,6 @@ class BitLinear(nn.Linear):
         else:
             raise AssertionError(f"Invalid QuantType: {self.QuantType}. Expected one of: 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit'")
         
-
         return u
 
     def Normalize(self, x):
@@ -228,12 +284,11 @@ class QuantizedModel:
                 if layer.WScale=='PerOutput':
                     # mag = w.abs().mean(dim=-1, keepdim=True).clamp_(min=1e-5)
                     mag = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5)
+
                     magmax = mag.max()
-                    # print (w.shape, mag.shape, magmax.shape)
                     scalequant = (127.0*mag/magmax).round().clamp_(1,127)
                     mag = scalequant * magmax / 127.0
-                    # scalequant = mag/magmax
-                    # print(magmax, mag, scalequant)
+
                     numscale = len (mag)                
                 elif layer.WScale=='PerTensor':
                     mag = w.abs().mean().clamp_(min=1e-5)
@@ -246,28 +301,18 @@ class QuantizedModel:
                 if QuantType == 'Ternary': # 1.58bits
                     scale = 1.0 / mag
                     u = (w * scale).round().clamp_(-1, 1) 
-                    bpw = 1.6
+                    bpw = 1.6 # stuffing 5 ternary weights into 8 bits
                 elif QuantType == 'Binary': # 1 bit
                     scale = mag
                     e = w.mean()
                     u = (w - e).sign() 
                     bpw = 1
-                elif QuantType == 'BinaryBalanced': # 1 bit, weights are balanced around zero
-                    e = w.mean()
-                    w0 = w - e
-                    scale = mag
-                    u = w0.sign() 
-                    bpw = 1
                 elif QuantType == '2bitsym':
-                    scale = 2 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+                    scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
                     u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
                     bpw = 2
-                elif QuantType == '2bit':
-                    scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-                    u = ((w * scale ).round().clamp_(-2, 1) ) 
-                    bpw = 2
                 elif QuantType == '4bitsym':
-                    scale = 6.5 / mag # 5
+                    scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
                     u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) 
                     bpw = 4
                 elif QuantType == '8bit':
@@ -320,15 +365,16 @@ class QuantizedModel:
         current_data = np.round(input_data * scale).clip(-128, 127) 
 
         for layer_info in self.quantized_model[:-1]:  # For all layers except the last one
-            weights = np.array(layer_info['quantized_weights'])
+            weights = np.array(layer_info['quantized_weights']) 
             conv = np.dot(current_data, weights.T)  # Matrix multiplication
 
             if layer_info['WScale']=='PerOutput':
                 scale = np.array(layer_info['quantized_scale']).transpose()
                 conv = conv * scale
 
-            # rescale = 127.0 / np.maximum(np.abs(conv).max(axis=-1, keepdims=True), 1e-5)
-            rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
+            max = np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
+            rescale = np.exp2(np.floor(np.log2(127.0 / max))) # Emulate normalization by shift as in C inference engine
+            # rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)   # Normalize to max 1.7 range
             current_data = np.round(conv * rescale).clip(0, 127)  # Quantize the output and ReLU
 
         # no renormalization for the last layer
@@ -338,7 +384,6 @@ class QuantizedModel:
         if self.quantized_model[-1]['WScale']=='PerOutput':
             scale = np.array(self.quantized_model[-1]['quantized_scale']).transpose()
             logits = logits * scale
-
 
         return logits
     
@@ -362,10 +407,11 @@ class QuantizedModel:
         activations = []  # List to store the activations after each layer
 
         for layer_info in self.quantized_model[:-1]:  # For all layers except the last one
-            weights = np.array(layer_info['quantized_weights'])
+            weights = np.array(layer_info['quantized_weights']) 
             conv = np.dot(current_data, weights.T)  # Matrix multiplication
-
-            rescale = 127.0 / np.maximum(np.abs(conv).max(axis=-1, keepdims=True), 1e-5)
+            max = np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
+            rescale = np.exp2(np.floor(np.log2(127.0 / max)))
+            # rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
             current_data = np.round(conv * rescale).clip(0, 127)  # Quantize the output and ReLU
 
             activations.append(current_data)  # Store the activations after this layer
@@ -377,49 +423,3 @@ class QuantizedModel:
         activations.append(logits)  # Store the activations after the last layer
 
         return activations
-
-    def export_to_hfile(self, filename):
-        """
-        Exports the quantized model to an Ansi-C header file.
-
-        Parameters:
-        filename (str): The name of the header file to which the quantized model will be exported.
-
-        Raises:
-        ValueError: If the quantized_model attribute is None or empty.
-
-        Note:
-        This method currently only supports binary quantization. 
-        """
-
-        if not self.quantized_model:
-            raise ValueError("quantized_model is empty or None")
-
-        with open(filename, 'w') as f:
-            f.write('#include <stdint.h>\n\n')
-            for layer_info in self.quantized_model:
-                layer= f'L{layer_info["layer_order"]}'
-                incoming_weights = layer_info['incoming_weights']
-                outgoing_weights = layer_info['outgoing_weights']
-                bpw = layer_info['bpw']
-                weights = np.array(layer_info['quantized_weights'])
-                quantization_type = layer_info['quantization_type']
-
-                # convert weights to binary enconding        
-                binary_weights = np.where(weights == -1, 0, 1)
-                # Pack 32 weights into one uint32_t
-                packed_weights = np.packbits(binary_weights.reshape(-1, 32), axis=-1).view(np.uint32).byteswap()
-
-                if quantization_type == 'Binary':
-                    pass
-                else:
-                    print("Only binary quantization can be exported to header files")
-
-                # Write layer order, shape, shiftright and weights to the file
-                f.write(f'// Layer: {layer}\n')
-                f.write(f'// Quantization type: {quantization_type}\n')
-                f.write(f'uint32_t {layer}_bitperweight = {bpw};\n')
-                f.write(f'uint32_t {layer}_incoming_weights = {incoming_weights};\n')
-                f.write(f'uint32_t {layer}_outgoing_weights = {outgoing_weights};\n')
-                f.write(f'uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
-
