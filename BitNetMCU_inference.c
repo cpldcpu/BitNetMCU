@@ -114,7 +114,7 @@ void processfclayer( int8_t *activations,  uint32_t *weights, int32_t bits_per_w
                     weightChunk <<= 4;
                 }
             }
-        } else printf("Error: unsupported weight bit width %d\n", bits_per_weight);
+        } // else printf("Error: unsupported weight bit width %d\n", bits_per_weight);
        
         output[i] = sum;
         // printf("%d,", output[i]);  
