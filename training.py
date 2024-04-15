@@ -18,7 +18,7 @@ import random
 
 hyperparameters = {
     "num_epochs": 60,
-    "QuantType": '4bitsym', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
+    "QuantType": '4bitlog', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
     "BPW": 4,  # Bits per weight 
     "NormType": 'RMS', # 'RMS', 'Lin', 'BatchNorm'
     "WScale": 'PerTensor', # 'PerTensor', 'PerOutput', 'PerOutputLog2'
@@ -34,7 +34,7 @@ hyperparameters = {
 }
 
 retrain = True  # Train or load model
-runtag = 'a11_Opt12k_cos'
+runtag = 'a11_Opt12k_cos_wzero'
 #---------------------------------------------
 
 def create_run_name(hyperparameters):

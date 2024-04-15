@@ -14,7 +14,7 @@ from BitNetMCU import FCMNIST, QuantizedModel
 
 hyperparameters = {
     "num_epochs": 60,
-    "QuantType": '4bitsym', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
+    "QuantType": '4bitlog', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
     "BPW": 4,  # Bits per weight 
     "NormType": 'RMS', # 'RMS', 'Lin', 'BatchNorm'
     "WScale": 'PerTensor', # 'PerTensor', 'PerOutput', 'PerOutputLog2'
@@ -29,7 +29,7 @@ hyperparameters = {
     "runname": ''
 }
 
-runtag = 'a11_Opt12k_cos'
+runtag = 'a11_Opt12k_cos_wzero'
 
 #---------------------------------------------
 exportfolder = 'model_h'
@@ -75,12 +75,19 @@ def export_to_hfile(quantized_model, filename, runname):
             print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
             if quantization_type == 'Binary':
                 encoded_weights = np.where(weights == -1, 0, 1)
+                quant = 1
             elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
-                encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+                encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  
+                quant = 2
             elif quantization_type == '4bitsym': 
-                encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+                encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  
+                quant = 4
+            elif quantization_type == '4bitlog': 
+                encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(int)  
+                quant = 4 + 16
             else:
-                print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
+                print(f'Layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
+                exit()
 
             # pack bits into 32 bit words
             weight_per_word = 32 // bpw 
@@ -95,7 +102,7 @@ def export_to_hfile(quantized_model, filename, runname):
             # Write layer order, shape, shiftright and weights to the file
             f.write(f'// Layer: {layer}\n')
             f.write(f'// Quantization type: {quantization_type}\n')
-            f.write(f'uint32_t {layer}_bitperweight = {bpw};\n')
+            f.write(f'uint32_t {layer}_bitperweight = {quant};\n')
             f.write(f'uint32_t {layer}_incoming_weights = {incoming_weights};\n')
             f.write(f'uint32_t {layer}_outgoing_weights = {outgoing_weights};\n')
             f.write(f'uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
