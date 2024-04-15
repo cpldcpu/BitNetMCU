@@ -3,7 +3,6 @@ data/
 runs/
 runs_opt/
 backup/
-modeldata/
 docs/
 model_h/
 plots/

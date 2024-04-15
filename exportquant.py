@@ -72,7 +72,7 @@ def export_to_hfile(quantized_model, filename, runname):
             if (bpw*incoming_weights%32) != 0:
                 raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
-            print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  NUm outgoing: {outgoing_weights}')
+            print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
             if quantization_type == 'Binary':
                 encoded_weights = np.where(weights == -1, 0, 1)
             elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
