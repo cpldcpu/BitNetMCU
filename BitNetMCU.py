@@ -324,10 +324,10 @@ class QuantizedModel:
                     scale = 32.0 / mag
                     u = (w * scale).round().clamp_(-128, 127) 
                     bpw = 8
-                elif QuantType ==  '4bitlog': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^3 = 8
-                    scale = 32.0 / mag # 2.0 for tensor, 8 for output
-                    e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
-                    u = w.sign()*(e.exp2())    
+                elif QuantType ==  '4bitlog': 
+                    scale = 32.0 / mag 
+                    e = ((w * scale ).abs()).log2().floor().clamp_(0, 7)
+                    u = w.sign()*(e.exp2() )    
                     bpw = 4              
                 elif QuantType == 'None':
                     scale = 1.0 / mag

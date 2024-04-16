@@ -34,7 +34,7 @@ hyperparameters = {
 }
 
 retrain = True  # Train or load model
-runtag = 'a11_Opt12k_cos_wzero'
+runtag = 'a11_Opt12k_cos_s00n'
 #---------------------------------------------
 
 def create_run_name(hyperparameters):

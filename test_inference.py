@@ -30,7 +30,7 @@ hyperparameters = {
     "runname": ''
 }
 
-runtag = 'a11_Opt12k_cos_wzero'
+runtag = 'a11_Opt12k_cos_s00n'
 
 #---------------------------------------------
 exportfolder = 'model_h'
