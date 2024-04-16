@@ -100,6 +100,22 @@ def export_to_hfile(quantized_model, filename, runname):
             f.write(f'uint32_t {layer}_outgoing_weights = {outgoing_weights};\n')
             f.write(f'uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
 
+def print_stats(quantized_model):
+    for layer_info in quantized_model.quantized_model:
+        weights = np.array(layer_info['quantized_weights'])
+        print()
+        print(f'Layer: {layer_info["layer_order"]}, Max: {np.max(weights)}, Min: {np.min(weights)}, Mean: {np.mean(weights)}, Std: {np.std(weights)}')
+
+        values, counts = np.unique(weights, return_counts=True)
+        probabilities = counts / np.sum(counts)
+
+        print(f'Values: {values}')
+        print(f'Percent: {(probabilities * 100)}')
+
+        number_of_codes = 2**layer_info['bpw'] 
+        entropy = -np.sum(probabilities * np.log2(probabilities))
+        print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
+  
 if __name__ == '__main__':
 
     # main
@@ -154,6 +170,9 @@ if __name__ == '__main__':
     print('Quantizing model...')
     # Quantize the model
     quantized_model = QuantizedModel(model)
+
+    print_stats(quantized_model)
+
     print(f'Total number of bits: {quantized_model.totalbits()} ({quantized_model.totalbits()/8/1024} kbytes)')
 
     # Inference using the quantized model
