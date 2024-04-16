@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 from datetime import datetime
 from BitNetMCU import FCMNIST, QuantizedModel
+import time
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
@@ -29,7 +30,11 @@ hyperparameters = {
     "runname": ''
 }
 
-runtag = 'a11_Opt12k_cos_s00n'
+# runtag = 'a11_Opt12k_cos_s00n'
+# runtag = 'a11_Opt12k_cos'
+# runtag = 'a11_Opt12k_cos_s00b16'
+# runtag = 'a11_Opt12k_cos_mixed'
+runtag = 'a21_Opt12k_cos_mixed'
 
 #---------------------------------------------
 exportfolder = 'model_h'
@@ -82,11 +87,11 @@ def export_to_hfile(quantized_model, filename, runname):
             elif quantization_type == '4bitsym': 
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  
                 quant = 4
-            elif quantization_type == '4bitlog': 
+            elif quantization_type == '4bitlog': # FP1.3.0 encoding (sign * 2^exp)
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(int)  
-                quant = 4 + 16
+                quant = 4 + 16 # offset 16 to encode FP 1.3.0
             else:
-                print(f'Layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
+                print(f'Quantization type not supported. Layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. ')
                 exit()
 
             # pack bits into 32 bit words
@@ -107,6 +112,22 @@ def export_to_hfile(quantized_model, filename, runname):
             f.write(f'uint32_t {layer}_outgoing_weights = {outgoing_weights};\n')
             f.write(f'uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
 
+def print_stats(quantized_model):
+    for layer_info in quantized_model.quantized_model:
+        weights = np.array(layer_info['quantized_weights'])
+        print()
+        print(f'Layer: {layer_info["layer_order"]}, Max: {np.max(weights)}, Min: {np.min(weights)}, Mean: {np.mean(weights)}, Std: {np.std(weights)}')
+
+        values, counts = np.unique(weights, return_counts=True)
+        probabilities = counts / np.sum(counts)
+
+        print(f'Values: {values}')
+        print(f'Percent: {(probabilities * 100)}')
+
+        number_of_codes = 2**layer_info['bpw'] 
+        entropy = -np.sum(probabilities * np.log2(probabilities))
+        print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
+   
 if __name__ == '__main__':
 
     # main
@@ -125,7 +146,8 @@ if __name__ == '__main__':
     train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
     test_data = datasets.MNIST(root='data', train=False, transform=transform)
     # Create data loaders
-    test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
+    # test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
+    test_loader = DataLoader(test_data, batch_size=10000, shuffle=False)
 
     # Initialize the network and optimizer
     model = FCMNIST(
@@ -163,12 +185,14 @@ if __name__ == '__main__':
     quantized_model = QuantizedModel(model)
     print(f'Total number of bits: {quantized_model.totalbits()} ({quantized_model.totalbits()/8/1024} kbytes)')
 
+    print_stats(quantized_model)
+
     # Inference using the quantized model
     print ("inference of quantized model")
 
-    # Initialize counters
     total_correct_predictions = 0
     total_samples = 0
+    start_time = time.time()
 
     # Iterate over the test data
     for input_data, labels in test_loader:
@@ -189,9 +213,12 @@ if __name__ == '__main__':
         total_correct_predictions += correct_predictions  # Multiply by batch size
         total_samples += input_data.shape[0]
 
+    end_time = time.time()
+
     # Calculate and print the overall fraction of correct predictions
     overall_correct_predictions = total_correct_predictions / total_samples
 
+    print(f"Time taken for inference and prediction: {end_time - start_time} seconds")
     print('Accuracy/Test of quantized model:', overall_correct_predictions * 100, '%') 
 
     print("Exporting model to header file")

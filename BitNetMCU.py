@@ -18,8 +18,8 @@ class FCMNIST(nn.Module):
         super(FCMNIST, self).__init__()
 
         self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc2 = BitLinear(network_width1, network_width2,QuantType='4bitsym',NormType=NormType, WScale=WScale)
+        self.fc3 = BitLinear(network_width2, network_width3,QuantType='4bitsym',NormType=NormType, WScale=WScale)
         # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
@@ -66,6 +66,7 @@ class CNNMNIST(nn.Module):
         super(FCMNIST, self).__init__()
 
         self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        # self.fc2 = BitLinear(network_width1, network_width2,QuantType='4bitsym',NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
         # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
@@ -214,10 +215,10 @@ class BitLinear(nn.Linear):
             scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
         elif self.QuantType ==  '4bitlog': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^3 = 8
-            scale = 32.0 / mag # 2.0 for tensor, 8 for output
+            scale = 16.0 / mag # 2.0 for tensor, 8 for output
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
-            u = w.ne(0)*w.sign()*(e.exp2()) / scale
-            # u = w.sign()*(e.exp2()) / scale
+            # u = w.ne(0)*w.sign()*(e.exp2()) / scale
+            u = w.sign()*(e.exp2()) / scale
         elif self.QuantType == '8bit':
             scale = 32.0 / mag
             u = (w * scale).round().clamp_(-128, 127) / scale   
@@ -325,7 +326,7 @@ class QuantizedModel:
                     u = (w * scale).round().clamp_(-128, 127) 
                     bpw = 8
                 elif QuantType ==  '4bitlog': 
-                    scale = 32.0 / mag 
+                    scale = 16.0 / mag 
                     e = ((w * scale ).abs()).log2().floor().clamp_(0, 7)
                     u = w.sign()*(e.exp2() )    
                     bpw = 4              
@@ -371,6 +372,7 @@ class QuantizedModel:
         if not self.quantized_model:
             raise ValueError("quantized_model is empty or None")
 
+        zero_counts = []
         scale = 127.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
         current_data = np.round(input_data * scale).clip(-128, 127) 
 
@@ -387,6 +389,35 @@ class QuantizedModel:
             # rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)   # Normalize to max 1.7 range
             current_data = np.round(conv * rescale).clip(0, 127)  # Quantize the output and ReLU
 
+            # Monitoring of zero activations
+            zero_activations = np.where(current_data == 0, 1, 0) 
+            zero_counts.append(zero_activations.T.dot(np.ones(current_data.shape[0])))    # count zero activation
+            sorted_zero_counts = np.sort(zero_counts[-1])
+            print(f'Layer {layer_info["layer_order"]} zero counts, ordered:')
+            print(sorted_zero_counts)
+
+            # Pruning, sets the "n" activations with the highest zero count to zero. Does not really work well, sharp drop in accuracy
+            # n = 2        
+            # max_zero_count_indices = np.argpartition(zero_counts[-1], -n)[-n:]
+            # print(max_zero_count_indices.shape)
+            # print(max_zero_count_indices)
+            # current_data[:, max_zero_count_indices] = 0
+
+            # statistics for block level skipping (e.g. reordering activatiosn so that entire blocks could be skipped) -> not a high pay off with MNIST
+            # sort_indices = np.argsort(zero_counts[-1])
+            # reordered_zero_activations = zero_activations[:, sort_indices]
+            # reduced_zero_activations = np.all(reordered_zero_activations.reshape(-1, 8, 8), axis=2).astype(int)
+            # reduced_zero_counts = reduced_zero_activations.T.dot(np.ones(reduced_zero_activations.shape[0]))    # count zero activation
+
+            # print(reduced_zero_counts)
+            
+            # exit(1)
+
+            # count zero weights
+            # non_zero_count = np.count_nonzero(current_data, axis=-1)
+            # zero_count = current_data.shape[-1] - non_zero_count
+            # zero_counts.append(zero_count)
+
         # no renormalization for the last layer
         weights = np.array(self.quantized_model[-1]['quantized_weights'])
         logits = np.dot(current_data, weights.T)  # Matrix multiplication
@@ -394,6 +425,9 @@ class QuantizedModel:
         if self.quantized_model[-1]['WScale']=='PerOutput':
             scale = np.array(self.quantized_model[-1]['quantized_scale']).transpose()
             logits = logits * scale
+
+        # for i, zero_count in enumerate(zero_counts):
+        #         print(f'Layer {i}: {zero_count}')
 
         return logits
     

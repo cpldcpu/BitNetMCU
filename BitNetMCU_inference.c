@@ -106,7 +106,9 @@ void processfclayer( int8_t *activations,  uint32_t *weights, int32_t bits_per_w
                 uint32_t weightChunk = *weightidx++;
                 for (uint32_t j = 0; j < 8; j++) {
                     int32_t in=*activations_idx++;
-                    int32_t tmpsum = (weightChunk & 0x80000000) ? -in : in; // one complements sign (bit set equals negative)
+                    int32_t tmpsum;
+                    
+                    tmpsum = (weightChunk & 0x80000000) ? -in : in; // one complements sign (bit set equals negative)
                     sum += tmpsum;                                  // sign*in*1
                     if (weightChunk & 0x10000000) sum += tmpsum<<1; // sign*in*2
                     if (weightChunk & 0x20000000) sum += tmpsum<<2; // sign*in*4
@@ -119,11 +121,13 @@ void processfclayer( int8_t *activations,  uint32_t *weights, int32_t bits_per_w
                 uint32_t weightChunk = *weightidx++;
                 for (uint32_t j = 0; j < 8; j++) {
                     int32_t in=*activations_idx++;
-                    int32_t tmpsum = (weightChunk & 0x80000000) ? -in : in; // one complements sign (bit set equals negative)
+                    int32_t tmpsum;
+                    
+                    tmpsum = (weightChunk & 0x80000000) ? -in : in; // one complements sign (bit set equals negative)
                     sum += tmpsum << ((weightChunk >> 28) & 7); // sign*in*2^log                       
                     weightChunk <<= 4;
                 }
-            }        
+            }
         }
         // else printf("Error: unsupported weight bit width %d\n", bits_per_weight);
        
