@@ -15,17 +15,17 @@ import time
 
 hyperparameters = {
     "num_epochs": 60,
-    "QuantType": '4bitlog', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
-    "BPW": 4,  # Bits per weight 
+    "QuantType": '3bitsym', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
+    "BPW": 3,  # Bits per weight 
     "NormType": 'RMS', # 'RMS', 'Lin', 'BatchNorm'
     "WScale": 'PerTensor', # 'PerTensor', 'PerOutput', 'PerOutputLog2'
     "batch_size": 128,
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
-    "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
-    "network_width3": 64,
+    "step_size": 20,
+    "network_width1": 80, 
+    "network_width2": 80, 
+    "network_width3": 80,
     "Augmentation": True,
     "runname": ''
 }
@@ -34,8 +34,9 @@ hyperparameters = {
 # runtag = 'a11_Opt12k_cos'
 # runtag = 'a11_Opt12k_cos_s00b16'
 # runtag = 'a11_Opt12k_cos_mixed'
-runtag = 'a21_Opt12k_cos_mixed'
-
+# runtag = 'a21_Opt12k_cos_mixed'
+# runtag = 'a21_cos_scale4'
+runtag = 'a21_cos_scale15'
 #---------------------------------------------
 exportfolder = 'model_h'
 #---------------------------------------------
@@ -84,6 +85,12 @@ def export_to_hfile(quantized_model, filename, runname):
             elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
                 encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  
                 quant = 2
+            elif quantization_type == '3bitsym': 
+                encoded_weights = ((weights < 0).astype(int) << 2) | (np.floor(np.abs(weights))).astype(int)  
+                quant = 3
+            elif quantization_type == '3bitlog': # FP1.2.0 encoding (sign * 2^exp)
+                encoded_weights = ((weights < 0).astype(int) << 2) | (np.floor(np.log2(np.abs(weights)))).astype(int)  
+                quant = 3 + 16 # offset 16 to encode FP 1.3.0
             elif quantization_type == '4bitsym': 
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  
                 quant = 4

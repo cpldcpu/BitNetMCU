@@ -18,8 +18,8 @@ class FCMNIST(nn.Module):
         super(FCMNIST, self).__init__()
 
         self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc2 = BitLinear(network_width1, network_width2,QuantType='4bitsym',NormType=NormType, WScale=WScale)
-        self.fc3 = BitLinear(network_width2, network_width3,QuantType='4bitsym',NormType=NormType, WScale=WScale)
+        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
         # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
@@ -78,18 +78,21 @@ class CNNMNIST(nn.Module):
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2, bias=False)
         self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=2, padding=2, bias=False, groups=1)
+        self.dropout = nn.Dropout(0.10)
 
 
-        # self.dropout = nn.Dropout(0.10)
     def forward(self, x):
         x = F.relu(self.conv1(x))
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv2(x))        
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = x.view(x.size(0), -1)
+        # x = self.dropout(x)
 
         x = F.relu(self.fc1(x))
+        # x = self.dropout(x)
         x = F.relu(self.fc2(x))
+        # x = self.dropout(x)
         x = F.relu(self.fc3(x))
         # x = self.dropout(x)
 
@@ -211,13 +214,29 @@ class BitLinear(nn.Linear):
         elif self.QuantType == '2bitsym':
             scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
             u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
+        elif self.QuantType == '3bitsym':
+            scale = 1.5 / mag 
+            u = ((w * scale - 0.5).round().clamp_(-4, 3) + 0.5) / scale
+        elif self.QuantType ==  '3bitlog': # encoding (F1.2.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^3 = 8
+            scale = 2.0 / mag
+            e = ((w * scale).abs()).log2().floor().clamp_(0, 3)
+            u = w.sign()*(e.exp2()) / scale
         elif self.QuantType == '4bitsym':
             scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
-        elif self.QuantType ==  '4bitlog': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^3 = 8
-            scale = 16.0 / mag # 2.0 for tensor, 8 for output
+        elif self.QuantType == '4bitpolar':
+            s=torch.full(w.shape,1).to(w.device)
+            s[...,::2, :] = -1
+            # print(s.shape)
+            # scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
+            # u = ((w * scale * s - 0.5).round().clamp_(-1,15) + 0.5) / ( scale * s)
+            scale = (32768/16) / mag
+            e = ((w * s* scale + 127).abs()).log2().floor().clamp_(0, 15)
+            # u = w.sign()*(e.exp2() - 127) / scale
+            u = (e.exp2() - 127) / (scale *s )
+        elif self.QuantType ==  '4bitlog': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 127
+            scale = 32.0 / mag
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
-            # u = w.ne(0)*w.sign()*(e.exp2()) / scale
             u = w.sign()*(e.exp2()) / scale
         elif self.QuantType == '8bit':
             scale = 32.0 / mag
@@ -317,6 +336,15 @@ class QuantizedModel:
                     scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
                     u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
                     bpw = 2
+                elif QuantType == '3bitsym':
+                    scale = 1.5 / mag 
+                    u = ((w * scale - 0.5).round().clamp_(-4, 3) + 0.5) 
+                    bpw = 3
+                elif QuantType == '3bitlog': # encoding (F1.2.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^3 = 8
+                    scale = 4.0 / mag # old 2
+                    e = ((w * scale).abs()).log2().floor().clamp_(0, 3)
+                    u = w.sign()*(e.exp2()) 
+                    bpw = 3
                 elif QuantType == '4bitsym':
                     scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
                     u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) 
@@ -326,7 +354,7 @@ class QuantizedModel:
                     u = (w * scale).round().clamp_(-128, 127) 
                     bpw = 8
                 elif QuantType ==  '4bitlog': 
-                    scale = 16.0 / mag 
+                    scale = 32.0 / mag 
                     e = ((w * scale ).abs()).log2().floor().clamp_(0, 7)
                     u = w.sign()*(e.exp2() )    
                     bpw = 4              

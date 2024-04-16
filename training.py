@@ -18,23 +18,23 @@ import random
 
 hyperparameters = {
     "num_epochs": 60,
-    "QuantType": '4bitlog', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
-    "BPW": 4,  # Bits per weight 
+    "QuantType": '3bitsym', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
+    "BPW": 3,  # Bits per weight 
     "NormType": 'RMS', # 'RMS', 'Lin', 'BatchNorm'
     "WScale": 'PerTensor', # 'PerTensor', 'PerOutput', 'PerOutputLog2'
     "batch_size": 128,
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
-    "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
-    "network_width3": 64,
+    "step_size": 20,
+    "network_width1": 80, 
+    "network_width2": 80, 
+    "network_width3": 80,
     "Augmentation": True,
     "runname": ''
 }
 
 retrain = True  # Train or load model
-runtag = 'a21_Opt12k_cos_mixed'
+runtag = 'a21_cos_scale15'
 #---------------------------------------------
 
 def create_run_name(hyperparameters):
