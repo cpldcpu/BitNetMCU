@@ -17,20 +17,27 @@ class FCMNIST(nn.Module):
     def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
         super(FCMNIST, self).__init__()
 
+        self.network_width1 = network_width1
+        self.network_width2 = network_width2
+        self.network_width3 = network_width3
+
         self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        if network_width3>0:
+            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        else:
+            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            
         # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
-
-        self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         # self.dropout = nn.Dropout(0.10)
     def forward(self, x):
         x = x.view(x.size(0), -1)
-
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
+        if self.network_width3>0:
+            x = F.relu(self.fc3(x))
         # x = self.dropout(x)
 
         # x = F.relu(self.fc4(x))

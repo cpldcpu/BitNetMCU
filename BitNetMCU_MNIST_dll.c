@@ -52,9 +52,15 @@ uint32_t BitMnistInference(int8_t *input) {
     // printf("L2 activations:  \n");
     // printactivations(layer_in, L2_outgoing_weights);
 
-    processfclayer(layer_in, L3_weights, L3_bitperweight, L3_incoming_weights, L3_outgoing_weights, layer_out);
-    ReLUNorm(layer_out, layer_in, L3_outgoing_weights);
+    #ifdef L4_active
+        processfclayer(layer_in, L3_weights, L3_bitperweight, L3_incoming_weights, L3_outgoing_weights, layer_out);
+        ReLUNorm(layer_out, layer_in, L3_outgoing_weights);
 
-    processfclayer(layer_in, L4_weights, L4_bitperweight, L4_incoming_weights, L4_outgoing_weights, layer_out);
-    return ReLUNorm(layer_out, layer_in, L4_outgoing_weights);
+        processfclayer(layer_in, L4_weights, L4_bitperweight, L4_incoming_weights, L4_outgoing_weights, layer_out);
+        return ReLUNorm(layer_out, layer_in, L4_outgoing_weights);
+    #else
+        processfclayer(layer_in, L3_weights, L3_bitperweight, L3_incoming_weights, L3_outgoing_weights, layer_out);
+        return ReLUNorm(layer_out, layer_in, L3_outgoing_weights);
+    #endif
+
 }

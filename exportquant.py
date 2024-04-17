@@ -22,9 +22,9 @@ hyperparameters = {
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
     "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
-    "network_width3": 64,
+    "network_width1": 72, 
+    "network_width2": 80, 
+    "network_width3": 0,
     "Augmentation": True,
     "runname": ''
 }
@@ -94,10 +94,12 @@ def export_to_hfile(quantized_model, filename, runname):
 
             # Write layer order, shape, shiftright and weights to the file
             f.write(f'// Layer: {layer}\n')
-            f.write(f'// Quantization type: {quantization_type}\n')
-            f.write(f'uint32_t {layer}_bitperweight = {bpw};\n')
-            f.write(f'uint32_t {layer}_incoming_weights = {incoming_weights};\n')
-            f.write(f'uint32_t {layer}_outgoing_weights = {outgoing_weights};\n')
+            f.write(f'// QuantType: {quantization_type}\n')
+
+            f.write(f'#define {layer}_active\n')
+            f.write(f'#define {layer}_bitperweight {bpw}\n')
+            f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
+            f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
             f.write(f'uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
 
 def print_stats(quantized_model):
