@@ -26,9 +26,9 @@ hyperparameters = {
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
     "step_size": 10,
-    "network_width1": 72, 
-    "network_width2": 80, 
-    "network_width3": 0,
+    "network_width1": 64, 
+    "network_width2": 64, 
+    "network_width3": 64,
     "Augmentation": True,
     "runname": ''
 }
