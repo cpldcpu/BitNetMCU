@@ -1,5 +1,4 @@
-/* Small example showing how to use the SWIO programming pin to 
-   do printf through the debug interface */
+/* Using BitNeuMCU for inference of 16x16 MNIST images on a CH32V003 */
 
 #include "ch32v003fun.h"
 
