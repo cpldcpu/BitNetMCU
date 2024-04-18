@@ -4,8 +4,8 @@ runs/
 runs_opt/
 backup/
 docs/
-model_h/
 plots/
+mcu/
 *.obj
 *.dll
 *.exp
