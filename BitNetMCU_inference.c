@@ -1,17 +1,17 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void processfclayer(int8_t *input, uint32_t *weights, int32_t bits_per_weight, uint32_t incoming_weights, uint32_t outgoing_weights, int32_t *output);
-uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_inpu);
-
+#include "BitNetMCU_inference.h"
 
 /**
  * @brief Applies a ReLU activation function to an array of integers and normalizes the result to 8-bit integers.
  * 
- * @param input: The input array of 32-bit integers.
- * @param output: The output array of 8-bit integers.
- * @param n_input: The number of elements in the input array.
+ * @param input Pointer to the input array of 32-bit integers.
+ * @param output Pointer to the output array of 8-bit integers.
+ * @param n_input The number of elements in the input array.
+ * @return The position of maximum value found in the input array before applying the ReLU activation.
  */
+
 uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_input) {
     int32_t max_val = -INT32_MAX;
     int32_t max_pos = 255;
@@ -50,7 +50,7 @@ uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_input) {
             int32_t tmp=(input[i] + rounding) >> scale;  
             // int32_t tmp=input[i] >> scale;
 
-            if (tmp > 127) {
+            if (tmp > 127) { // clipping needed to catch overflow from rounding
                 output[i] = 127;
             } else {
             output[i] = tmp;
@@ -68,9 +68,9 @@ uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_input) {
  *
  * @param activations Pointer to the input activations of the layer.
  * @param weights Pointer to the weights of the layer.
+ * @param bits_per_weight The number of bits per weight.
  * @param n_input The number of input neurons.
  * @param n_output The number of output neurons.
- * @param shift The number of right shifts to apply to the sum of the dot product.
  * @param output Pointer to the output array where the result of the layer is stored.
  */
 
