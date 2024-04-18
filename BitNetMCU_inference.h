@@ -28,6 +28,6 @@ uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_inpu);
  * @param n_output The number of output neurons.
  * @param output Pointer to the output array where the result of the layer is stored.
  */
-void processfclayer(int8_t *input, uint32_t *weights, int32_t bits_per_weight, uint32_t incoming_weights, uint32_t outgoing_weights, int32_t *output);
+void processfclayer(int8_t *input, const uint32_t *weights, int32_t bits_per_weight, uint32_t incoming_weights, uint32_t outgoing_weights, int32_t *output);
 
 #endif // BITNETMCU_INFERENCE_H
