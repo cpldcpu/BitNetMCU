@@ -5,7 +5,6 @@ runs_opt/
 backup/
 docs/
 plots/
-mcu/
 *.obj
 *.dll
 *.exp
