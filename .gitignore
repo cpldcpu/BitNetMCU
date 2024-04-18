@@ -11,6 +11,12 @@ mcu/
 *.exp
 *.lib
 *.exe
+*.hex
+*.elf
+*.bin
+*.map
+*.o
+*.lst
 # python cache
 __pycache__/
 
