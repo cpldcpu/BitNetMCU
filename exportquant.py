@@ -113,7 +113,7 @@ def export_to_hfile(quantized_model, filename, runname):
             f.write(f'#define {layer}_bitperweight {bpw}\n')
             f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
             f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
-            f.write(f'uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
+            f.write(f'const uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
         
         f.write('#endif\n')
 
