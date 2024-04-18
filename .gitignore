@@ -4,7 +4,6 @@ runs/
 runs_opt/
 backup/
 docs/
-plots/
 *.obj
 *.dll
 *.exp
@@ -16,6 +15,7 @@ plots/
 *.map
 *.o
 *.lst
+*.bkp
 # python cache
 __pycache__/
 
