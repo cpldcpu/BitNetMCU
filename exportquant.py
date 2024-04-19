@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 import numpy as np
 from datetime import datetime
 from BitNetMCU import FCMNIST, QuantizedModel
+import math
+import matplotlib.pyplot as plt
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
@@ -30,6 +32,8 @@ hyperparameters = {
 }
 
 runtag = 'a11_Opt12k_cos'
+
+showplots = True
 
 #---------------------------------------------
 exportfolder = 'model_h'
@@ -134,6 +138,85 @@ def print_stats(quantized_model):
         entropy = -np.sum(probabilities * np.log2(probabilities))
         print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
   
+
+def plot_statistics(quantized_model):
+    # Step 1: Extract the weights of the first layer
+    first_layer_weights = np.array(quantized_model.quantized_model[0]['quantized_weights'])
+
+    # Step 2: Reshape the weights into a 16x16 grid
+    reshaped_weights = first_layer_weights.reshape(16, 16, -1)
+    print(reshaped_weights.shape)
+    # Step 3: Calculate the variance of each channel
+    variances = np.var(reshaped_weights, axis=-1)
+
+    # Calculate the mean of each channel
+    means = np.mean(reshaped_weights, axis=-1)
+
+    # Create a figure with 2 subplots: one for variance, one for mean
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+    # Plot the variance
+    axs[0].imshow(variances, cmap='hot', interpolation='nearest')
+    axs[0].set_title('Variance vs Channel')
+    fig.colorbar(plt.cm.ScalarMappable(cmap='hot'), ax=axs[0], label='Variance')
+
+    # Plot the mean
+    im = axs[1].imshow(means, cmap='hot', interpolation='nearest')
+    axs[1].set_title('Mean vs Channel')
+    fig.colorbar(im, ax=axs[1], label='Mean')
+
+    # Display the plot
+    plt.show(block=False)    
+
+        
+def plot_weights(quantized_model):
+    # Step 1: Extract the weights of the first layer
+    first_layer_weights = np.array(quantized_model.quantized_model[0]['quantized_weights'])
+
+    # Step 2: Reshape the weights into a 16x16 grid for each output channel
+    reshaped_weights = first_layer_weights.reshape(-1, 16, 16)
+
+    # Calculate the number of output channels
+    num_channels = reshaped_weights.shape[0]
+
+    # Calculate the number of rows and columns for the subplots
+    num_cols = int(math.sqrt(num_channels))
+    num_rows = num_channels // num_cols
+    if num_channels % num_cols != 0:
+        num_rows += 1
+
+    # Step 3: Create a figure with a grid of subplots, one for each output channel
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(8, 8))
+
+    # Step 4: For each output channel, plot the weights in the corresponding subplot
+    for i in range(num_cols*num_rows):
+        row = i // num_cols
+        col = i % num_cols
+        if i < num_channels:
+            axs[row, col].imshow(reshaped_weights[i], cmap='hot', interpolation='nearest')
+        axs[row, col].axis('off')  # Turn off axis for each subplot
+    # Reduce the gaps between the subplots
+    # plt.subplots_adjust(wspace=-0.10, hspace=-0.10)
+    # Display the plot
+    plt.tight_layout()  # This will ensure the subplots do not overlap
+    plt.show(block=False)
+
+def plot_weight_histograms(quantized_model):
+    fig = plt.figure(figsize=(10, 10))
+
+    for layer_index, layer in enumerate(quantized_model.quantized_model):
+        layer_weights = np.array(layer['quantized_weights'])
+
+        flattened_weights = layer_weights.flatten()
+
+        ax = fig.add_subplot(len(quantized_model.quantized_model), 1, layer_index + 1)
+
+        ax.hist(flattened_weights, bins='auto')
+        ax.set_title(f'Layer {layer_index+1} Weight Distribution')
+
+    plt.tight_layout()  
+    plt.show(block=False)
+
 if __name__ == '__main__':
 
     # main
@@ -189,7 +272,13 @@ if __name__ == '__main__':
     # Quantize the model
     quantized_model = QuantizedModel(model)
 
+    # Print statistics
     print_stats(quantized_model)
+
+    if showplots:
+        plot_weights(quantized_model)
+        # plot_statistics(quantized_model)
+        plot_weight_histograms(quantized_model)
 
     print(f'Total number of bits: {quantized_model.totalbits()} ({quantized_model.totalbits()/8/1024} kbytes)')
 
@@ -204,6 +293,7 @@ if __name__ == '__main__':
     for input_data, labels in test_loader:
         # Reshape and convert to numpy
         input_data = input_data.view(input_data.size(0), -1).cpu().numpy()
+
         labels = labels.cpu().numpy()
 
         # Inference
@@ -228,3 +318,4 @@ if __name__ == '__main__':
     # export the quantized model to a header file
     # export_to_hfile(quantized_model, f'{exportfolder}/{runname}.h')
     export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname)
+    plt.show()
