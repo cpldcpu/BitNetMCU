@@ -28,11 +28,13 @@ def export_test_data_to_c(test_loader, filename, num=8):
             labels = labels.cpu().numpy()
 
             scale = 127.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
-            scaled_data = np.round(input_data * scale).clip(-128, 127)
+            scaled_data = np.round(input_data * scale).clip(-128, 127).astype(np.uint8)
 
-            # Convert to C array declarations
-            for j, data in enumerate(scaled_data):
-                f.write(f'int8_t input_data_{i}[256] = ' + '{' + ', '.join(map(str, data.flatten())) + '};\n')
+            f.write(f'int8_t input_data_{i}[256] = {{\n')
+            flattened_data = scaled_data.flatten()
+            for k in range(0, len(flattened_data), 16):
+                f.write(', '.join(f'0x{value:02X}' for value in flattened_data[k:k+16]) + ',\n')
+            f.write('};\n')
 
             f.write(f'uint8_t label_{i} = ' + str(labels[0]) + ';\n')
 

@@ -1,4 +1,4 @@
-num_epochs: 30
+num_epochs: 60
 QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
 BPW : 4
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
