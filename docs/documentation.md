@@ -208,7 +208,7 @@ The test loss and accuracy, in contrast, does not show a significant improvement
     <img src="./12kLoss_test.svg" width="60%">
 </p>
 
-The test loss plot above for the 120 epoch runs clearly shows that the higher the number of bits per weight, the greater the increase in test loss. This dependence is somewhat surprising, as one might assume from the previous results that all models have the same capacity and therefore should exhibit similar overfitting behavior. However, it has been previously suggested that low bit quantization can have a regularizing effect on the network[^7]. This could explain the observed behavior.
+The test loss plot above for the 120 epoch runs clearly shows that the higher the number of bits per weight, the greater the increase in test loss. This dependence is somewhat surprising, as one might assume from the previous results that all models have the same capacity and therefore should exhibit similar overfitting behavior. However, it has been previously suggested that low bit quantization can have a regularizing effect on the network [^7]. This could explain the observed behavior.
 
 However, despite the regularizing effect, the test accuracy does not exceed 98.4%, suggesting that the model is unable to generalize to all of the test data.
 
@@ -561,5 +561,3 @@ While this project focused on MNIST inference as a test case, I hope to use this
 [^6]: B. Zhang et al.  *Root Mean Square Layer Normalization* [arXiv:1910.07467](https://arxiv.org/abs/1910.07467)
 
 [^7] M. Courbariaux et al. *BinaryConnect: Training Deep Neural Networks with binary weights during propagations* [arXiv:1511.00363](https://arxiv.org/abs/1511.00363)
-
-regex: ^(?!.*\\).*2bit
