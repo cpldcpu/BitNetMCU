@@ -520,9 +520,13 @@ Mismatches between engines: 3 (0.03%)
 ```
 ## Implementation on the CH32V003
 
-The implementation on the CH32V003 is straightforward and can be found [here](https://github.com/cpldcpu/BitNetMCU/tree/main/mcu). The model data is included in the C code, and the inference engine is called from the main loop. I used the excellent [CH32V003fun](https://github.com/cnlohr/ch32v003fun) environment to minimize overhead code as much as possible. This allowed me to include up to 12KB of model data into the 16KB of flash memory.
+The implementation on the CH32V003 is straightforward and can be found [here](https://github.com/cpldcpu/BitNetMCU/tree/main/mcu). The model data is included in the C code, and the inference engine is called from the main loop. I used the excellent [CH32V003fun](https://github.com/cnlohr/ch32v003fun) environment to minimize overhead code as much as possible. This allowed me to include up to 12KB of model data into the 16KB of flash memory.  The execution timing was optimized by moving the fc-layer code to the SRAM, which avoids flash wait states. Further optimizations on assembler level will certainly improve the performance further, but the generated code was already quite good.
 
-Four test cases are evaluated, and the execution timing is measured. The execution timing was optimized by moving the fc-layer code to the SRAM, which avoids flash wait states. 
+<div align="center">
+    <img src="themcu.jpg" width="50%">
+</div>
+
+Four test cases are evaluated, and the execution timing is measured using the internal SysTick profiling timer. The results are printed to the debug-console using printf.
 
 Example output for inference with a 25126 4-bit parameter model is shown below.
 
