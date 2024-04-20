@@ -6,39 +6,19 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from BitNetMCU import FCMNIST
+from BitNetMCU import FCMNIST, CNNMNIST
 import time
 import random
+import argparse
+import yaml
 
 #----------------------------------------------
 # BitNetMCU training
 # cpldcpu 2024-03 
 #----------------------------------------------
-# Define training hyperparameters here!!
-
-hyperparameters = {
-    "num_epochs": 60,
-    "QuantType": '4bitsym', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
-    "BPW": 4,  # Bits per weight 
-    "NormType": 'RMS', # 'RMS', 'Lin', 'BatchNorm'
-    "WScale": 'PerTensor', # 'PerTensor', 'PerOutput', 'PerOutputLog2'
-    "batch_size": 128,
-    "learning_rate": 1e-3,
-    "lr_decay": 0.1, # these are not used with cosine scheduler
-    "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
-    "network_width3": 64,
-    "Augmentation": True,
-    "runname": ''
-}
-
-retrain = True  # Train or load model
-runtag = 'a11_Opt12k_cos'
-#---------------------------------------------
 
 def create_run_name(hyperparameters):
-    runname = runtag + ('_Aug' if hyperparameters["Augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"]) + "_lr" + str(hyperparameters["learning_rate"]) + "_decay" + str(hyperparameters["lr_decay"]) + "_stepsize" + str(hyperparameters["step_size"]) + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
+    runname = hyperparameters["runtag"] + hyperparameters["scheduler"] + '_lr' + str(hyperparameters["learning_rate"]) + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
     hyperparameters["runname"] = runname
     return runname
 
@@ -54,7 +34,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     batch_size = hyperparameters["batch_size"]  # Define your batch size
 
     # ON-the-fly augmentation requires using the (slow) dataloader. Without augmentation, we can load the entire dataset into GPU for speedup
-    if hyperparameters["Augmentation"]: 
+    if hyperparameters["augmentation"]: 
         train_loader = DataLoader(
         train_data, batch_size=batch_size, shuffle=True,
         num_workers=4, pin_memory=True)
@@ -71,8 +51,11 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)    
-    # scheduler = StepLR(optimizer, step_size=step_size, gamma=lr_decay)
+    if hyperparameters["scheduler"] == "StepLR":
+        scheduler = StepLR(optimizer, step_size=step_size, gamma=lr_decay)
+    elif hyperparameters["scheduler"] == "Cosine":
+        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)    
+
     criterion = nn.CrossEntropyLoss()
 
     # tensorboard writer
@@ -88,7 +71,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         train_loss=[]
         start_time = time.time()
 
-        if hyperparameters["Augmentation"]:
+        if hyperparameters["augmentation"]:
             for i, (images, labels) in enumerate(train_loader):
                 images, labels = images.to(device), labels.to(device)
                 optimizer.zero_grad()
@@ -156,8 +139,20 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     writer.close()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Training script')
+    parser.add_argument('--params', type=str, help='Name of the parameter file', default='trainingparameters.yaml')
+    
+    args = parser.parse_args()
+    
+    if args.params:
+        paramname = args.params
+    else:
+        paramname = 'trainingparameters.yaml'
 
-    # main
+    print(f'Load parameters from file: {paramname}')
+    with open(paramname) as f:
+        hyperparameters = yaml.safe_load(f)
+
     runname= create_run_name(hyperparameters)
     print(runname)
 
@@ -173,12 +168,12 @@ if __name__ == '__main__':
     train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
     test_data = datasets.MNIST(root='data', train=False, transform=transform)
 
-    if hyperparameters["Augmentation"]:
+    if hyperparameters["augmentation"]:
         # Data augmentation for training data
         augmented_transform = transforms.Compose([
             # 10,10 seems to be best combination
-            transforms.RandomRotation(degrees=10),  
-            transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
+            transforms.RandomRotation(degrees=hyperparameters["rotation1"]),  
+            transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
             transforms.Resize((16, 16)),  # Resize images to 16x16
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))

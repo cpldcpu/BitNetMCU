@@ -6,43 +6,21 @@ from datetime import datetime
 from BitNetMCU import FCMNIST, QuantizedModel
 import math
 import matplotlib.pyplot as plt
+import argparse
+import yaml
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
 # Note: Hyperparameters are used to generated the filename
-
-#----------------------------------------------
-# Define training hyperparameters here11
-
-hyperparameters = {
-    "num_epochs": 60,
-    "QuantType": '4bitsym', # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
-    "BPW": 4,  # Bits per weight 
-    "NormType": 'RMS', # 'RMS', 'Lin', 'BatchNorm'
-    "WScale": 'PerTensor', # 'PerTensor', 'PerOutput', 'PerOutputLog2'
-    "batch_size": 128,
-    "learning_rate": 1e-3,
-    "lr_decay": 0.1, # these are not used with cosine scheduler
-    "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
-    "network_width3": 64,
-    "Augmentation": True,
-    "runname": ''
-}
-
-runtag = 'a11_Opt12k_cos'
-
-showplots = True
-
 #---------------------------------------------
-exportfolder = 'model_h'
-#---------------------------------------------
+
+showplots = True # display plots with statistics
 
 def create_run_name(hyperparameters):
-    runname = runtag + ('_Aug' if hyperparameters["Augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"]) + "_lr" + str(hyperparameters["learning_rate"]) + "_decay" + str(hyperparameters["lr_decay"]) + "_stepsize" + str(hyperparameters["step_size"]) + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
+    runname = hyperparameters["runtag"] + hyperparameters["scheduler"] + '_lr' + str(hyperparameters["learning_rate"]) + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
     hyperparameters["runname"] = runname
     return runname
+
 
 def export_to_hfile(quantized_model, filename, runname):
     """
@@ -218,6 +196,19 @@ def plot_weight_histograms(quantized_model):
     plt.show(block=False)
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Training script')
+    parser.add_argument('--params', type=str, help='Name of the parameter file', default='trainingparameters.yaml')
+    
+    args = parser.parse_args()
+    
+    if args.params:
+        paramname = args.params
+    else:
+        paramname = 'trainingparameters.yaml'
+
+    print(f'Load parameters from file: {paramname}')
+    with open(paramname) as f:
+        hyperparameters = yaml.safe_load(f)
 
     # main
     runname= create_run_name(hyperparameters)
@@ -278,7 +269,7 @@ if __name__ == '__main__':
     if showplots:
         plot_weights(quantized_model)
         # plot_statistics(quantized_model)
-        plot_weight_histograms(quantized_model)
+        # plot_weight_histograms(quantized_model)
 
     print(f'Total number of bits: {quantized_model.totalbits()} ({quantized_model.totalbits()/8/1024} kbytes)')
 
