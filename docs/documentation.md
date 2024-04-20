@@ -79,7 +79,7 @@ The implementation of one bit quantization is straight forward, the scale derive
     u = (w - e).sign() * scale
 ```
 
-For 2 and more bit quantization I chose to use symmetric encoding without zero, e.g. **[11,10,00,01] -> [+1.5 +0.5 -0.5 -1.5]**. Assymetric encoding including zero did not show any benefits. The scale factor of 1.5 was chosen empirically. Experiments with per-channel scaling did not show any improvement over per-layer scaling in QAT, surely something to revisit later. The quantization function is shown below. 
+For 2 and more bit quantization I chose to use symmetric encoding without zero, e.g. **[11,10,00,01] -> [+1.5 +0.5 -0.5 -1.5]**. Asymmetric encoding including zero did not show any benefits. The scale factor of 1.5 was chosen empirically. Experiments with per-channel scaling did not show any improvement over per-layer scaling in QAT, surely something to revisit later. The quantization function is shown below. 
 
 ```python
     mag = w.abs().mean().clamp_(min=1e-5)
@@ -96,11 +96,11 @@ The sizes of the hidden layers are parametrizable.
 
 # Model Optimization
 
-The MNIST dataset with standard train/test split was used. Unless noted otherwise, the model was trained with a batch size of 128 and intial learning rate of 0.01 for 30 Epochs. The learning rate was reduced by a factor of 0.1 after each 10 epochs. Adam optimizer was used and cross entropy loss function.
+The MNIST dataset with standard train/test split was used. Unless noted otherwise, the model was trained with a batch size of 128 and initial learning rate of 0.01 for 30 Epochs. The learning rate was reduced by a factor of 0.1 after each 10 epochs. Adam optimizer was used and cross entropy loss function.
 
 ## Quantization Aware Training vs Post-Quantization
 
-To investigate the efficacy of QAT, I trained the model with different bit-widths for weights and quantizated it to the same or smaller bitwidth before testing. I kept the network size at *w1=w2=w3=64* for all runs. 
+To investigate the efficacy of QAT, I trained the model with different bit-widths for weights and quantized it to the same or smaller bit-width before testing. I kept the network size at *w1=w2=w3=64* for all runs. 
 
 <div align="center">
     <img src="./prepostquant.png" width="60%">
@@ -118,7 +118,7 @@ To deploy the model on a microcontroller, the model size should be kept as small
     <img src="./train_loss_vs_now.png" width="80%">
 </div>
 
-The plot above shows training loss vs. total number of weights. We can see that there is a polynomial relationship between the number of weights and the training loss. Reducing the number of bits per weigths increases the loss proportionally. Interestingly, there are diminishing returns when increasing the number of bits beyond 4 and loss is not reduced further. It appears that beyond 4 bit, no more information per weight can be stored in the model. 
+The plot above shows training loss vs. total number of weights. We can see that there is a polynomial relationship between the number of weights and the training loss. Reducing the number of bits per weight increases the loss proportionally. Interestingly, there are diminishing returns when increasing the number of bits beyond 4 and loss is not reduced further. It appears that beyond 4 bit, no more information per weight can be stored in the model. 
 
 <div align="center">
     <img src="./train_loss_vs_totalbits.png" width="80%">
@@ -134,7 +134,7 @@ Practically, this scaling relationship means that the number of bits per weight 
 
 ### Test Accuracy and Loss
 
-The scaling relationship above allows prediciting train loss from model size. The plots below show the relationship between train and test loss and accuracy vs. model size.
+The scaling relationship above allows predicting train loss from model size. The plots below show the relationship between train and test loss and accuracy vs. model size.
 
 <div align="center">
     <img src="./train_vs_test_loss.png" width="70%">
@@ -149,7 +149,7 @@ To improve model performance further, I fixed the model size to 12kb and explore
 
 ## Optimizing training parameters
 
-The table below shows a set of network parameters that result in a model size close to 12kbyte for various quantization levels. The number of weights in each layer was chosen to align parameter storage with int32. I tried to maintain the same width across all layers. 
+The table below shows a set of network parameters that result in a model size close to 12 kbyte for various quantization levels. The number of weights in each layer was chosen to align parameter storage with int32. I tried to maintain the same width across all layers. 
 
 <div align="center">
 
@@ -185,13 +185,13 @@ The test loss and accuracy, in contrast, does not show a significant improvement
     <img src="./12kLoss_test.svg" width="60%">
 </p>
 
-The test loss plot above for the 120 epoch runs clearly shows that the higher the number of bits per weight, the greater the increase in test loss. This dependence is somewhat surprising, as one might assume from the previous results that all models have the same capacity and therefore should exhibit similar overfitting behavior. However, it has been previously suggested that low bit quantization can have a regularizing effect on the network [^7]. This could explain the observed behavior.
+The test loss plot above for the 120 epoch runs clearly shows that the higher the number of bits per weight, the greater the increase in test loss. This dependence is somewhat surprising, as one might assume from the previous results that all models have the same capacity and therefore should exhibit similar overfitting behavior. It has been previously suggested that low bit quantization can have a regularizing effect on the network [^7]. This could explain the observed behavior.
 
 However, despite the regularizing effect, the test accuracy does not exceed 98.4%, suggesting that the model is unable to generalize to all of the test data.
 
 ### Data Augmentation
 
-To improve the generalization of the model, and counter the overfitting, I I applied data augmentation to the training data. Randomized affine transformations were used to add a second set of training images to the unaltered MNIST dataset. In each epoch, the standard set of 60000 training images plus 60000 images with randomized transformations were used for training.
+To improve the generalization of the model, and counter the overfitting, I applied data augmentation to the training data. Randomized affine transformations were used to add a second set of training images to the unaltered MNIST dataset. In each epoch, the standard set of 60000 training images plus 60000 images with randomized transformations were used for training.
 
 ```python
     augmented_transform = transforms.Compose([
@@ -265,7 +265,7 @@ This modification increased the test accuracy to above 99%. Memory-efficient dep
 
 Since the training is performed on the model in float format (the weights are only quantized during forward and backward pass), the model needs to be converted to a quantized format and then exported to a format that can be included into the inference code on the CH32V003.
 
-Let's first start with the target architecture. To reduce computational effort on the microcontroller as much as possible, I slighty modified the network architecture implementation.
+Let's first start with the target architecture. To reduce computational effort on the microcontroller as much as possible, I modified the network architecture implementation.
 
 Key observations:
 
@@ -331,7 +331,7 @@ This is how the inner loop looks in RV32EC assembly (compiled with -O3)
 
 The full loop is 6 instructions while the actual computation is just 3 instructions (lb, bltz,neg/add). The compiler did quite a good job to split the conditional into two code paths to avoid an addition "neg" instruction. 
 
-It would be possible to unroll the loop to remove loop overhead. In that case 4 instructions are required per weight, since the trick with two codes pathes would not work easily anymore.
+It would be possible to unroll the loop to remove loop overhead. In that case 4 instructions are required per weight, since the trick with two codes paths would not work easily anymore.
 
 Convolution with 4 bit weight is shown below. The multiplication is implemented by individual bit test and shift, as the MCU does not support a native multiplication instruction. The encoding as one-complement number without zero helps with code efficiency. 
 
@@ -436,7 +436,7 @@ The flow is shown in the figure below.
 
 ## Model Exporting
 
-Output of the exporting tool is shown below. Some statistics on parameter usage are calculcated. We can see that the model is using all available codes, but they are not evenly distributed. This means that the model could be compressed further and that the entropy is not maximized.  
+Output of the exporting tool is shown below. Some statistics on parameter usage are printed. We can see that the model is using all available codes, but they are not evenly distributed. This means that the model could be compressed further and that the entropy is not maximized.  
 
 ```
 Inference using the original model...
@@ -486,9 +486,9 @@ Accuracy/Test of trained model: 98.98 %
 Quantizing model...
 Total number of bits: 100864 (12.3125 kbytes)
 Verifying inference of quantized model in Python and C
-Mismatch between inference engines found. Preduction C: 6 Prediction Python: 4 True: 4
-Mismatch between inference engines found. Preduction C: 5 Prediction Python: 0 True: 5
-Mismatch between inference engines found. Preduction C: 3 Prediction Python: 5 True: 3
+Mismatch between inference engines. Prediction C: 6 Prediction Python: 4 True: 4
+Mismatch between inference engines. Prediction C: 5 Prediction Python: 0 True: 5
+Mismatch between inference engines. Prediction C: 3 Prediction Python: 5 True: 3
 size of test data: 10000
 Mispredictions C: 98 Py: 99
 Overall accuracy C: 99.02 %
