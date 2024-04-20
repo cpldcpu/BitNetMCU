@@ -1,7 +1,6 @@
 # BitNetMCU
 
 **Training and Inference of Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
-- [BitNetMCU](#bitnetmcu)
 - [Introduction and Motivation](#introduction-and-motivation)
   - [Background](#background)
 - [Implementation of training code](#implementation-of-training-code)
@@ -28,29 +27,7 @@
 
 Recently, there has been considerable hype about large language models (LLMs) with "1 Bit" or "1.58 Bit" [^1] weight quantization. The claim is that, by using Quantization Aware Training (QAT), LLMs can be trained with almost no loss of quality when using only binary or ternary encoding of weigths. 
 
-Interestingly, low bit quantization is also advantageous for inference on microcontrollers. The CH32V003 microcontroller gained some notoriety being extremely low cost for a 32 bit MCU (less than $0.15 in low volume), but is also notable for the RV32EC ISA, which supports only 16 registers and lacks a hardware multiplier. It also only has 16kb of flash and 2kb of ram.- [BitNetMCU](#bitnetmcu)
-  - [Introduction and Motivation](#introduction-and-motivation)
-  - [Background](#background)
-  - [Implementation of training code](#implementation-of-training-code)
-  - [Model Optimization](#model-optimization)
-    - [Quantization Aware Training vs Post-Quantization](#quantization-aware-training-vs-post-quantization)
-    - [Model Capacity vs Quantization scaling](#model-capacity-vs-quantization-scaling)
-    - [Test accuracy and loss](#test-accuracy-and-loss)
-    - [Optimizing training parameters](#optimizing-training-parameters)
-      - [Learning rate and number of epochs](#learning-rate-and-number-of-epochs)
-      - [Data Augmentation](#data-augmentation)
-  - [Architecture of the Inference Engine](#architecture-of-the-inference-engine)
-    - [Implementation in Ansi-C](#implementation-in-ansi-c)
-      - [fc-layer](#fc-layer)
-      - [ShiftNorm / ReLU block](#shiftnorm--relu-block)
-  - [Putting it all together](#putting-it-all-together)
-    - [Test results](#test-results)
-      - [Data exporting](#data-exporting)
-      - [Verification of Ansi-C inference engine vs. Python](#verification-of-ansi-c-inference-engine-vs-python)
-      - [Actual implementation on the CH32V003](#actual-implementation-on-the-ch32v003)
-  - [Summary and Conclusions](#summary-and-conclusions)
-  - [References](#references)
-
+Interestingly, low bit quantization is also advantageous for inference on microcontrollers. The CH32V003 microcontroller gained some notoriety being extremely low cost for a 32 bit MCU (less than $0.15 in low volume), but is also notable for the RV32EC ISA, which supports only 16 registers and lacks a hardware multiplier. It also only has 16kb of flash and 2kb of ram.
 
 The use of a few bits for each weight encoding means that less memory is required to store weights, and inference can be performed using only additions. Thus, the absence of a multiplication instruction is not an impediment to running inference on this microcontroller.
 

@@ -15,6 +15,7 @@ backup/
 *.o
 *.lst
 *.bkp
+*.pdf
 # python cache
 __pycache__/
 
