@@ -1,0 +1,60 @@
+<mxfile host="Electron" modified="2024-04-15T15:45:28.372Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.2.5 Chrome/120.0.6099.109 Electron/28.1.0 Safari/537.36" etag="9ykYkHDtLMGA7RR8jJQR" version="24.2.5" type="device">
+  <diagram name="Seite-1" id="3egPZ30w5yX0ER5DUbPS">
+    <mxGraphModel dx="1077" dy="627" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1654" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="cQJqnNuV-BZ1jjLTNnZL-3" target="cQJqnNuV-BZ1jjLTNnZL-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-3" value="Train Model&lt;div&gt;&lt;b&gt;(Training.py)&lt;/b&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="150" y="380" width="137.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.507;entryY=-0.063;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="cQJqnNuV-BZ1jjLTNnZL-4" target="cQJqnNuV-BZ1jjLTNnZL-3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="360" />
+              <mxPoint x="220" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-4" value="Test &amp;amp; Training Data&lt;br&gt;(MNIST)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;" vertex="1" parent="1">
+          <mxGeometry x="158.75" y="280" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" target="cQJqnNuV-BZ1jjLTNnZL-7">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="410" y="440" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="410" y="460" />
+              <mxPoint x="219" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-5" value="Trained Model Weights (pth)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;" vertex="1" parent="1">
+          <mxGeometry x="350" y="380" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="cQJqnNuV-BZ1jjLTNnZL-7" target="cQJqnNuV-BZ1jjLTNnZL-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-7" value="Verify and export quantized model&lt;div&gt;&lt;b&gt;(Exportquant.py)&lt;/b&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="151.25" y="480" width="135" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-8" value="Verify C-inference &lt;br&gt;vs. python&lt;div&gt;&lt;b&gt;(Test-inference.py)&lt;/b&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="152.5" y="580" width="135" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="cQJqnNuV-BZ1jjLTNnZL-10" target="cQJqnNuV-BZ1jjLTNnZL-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-10" value="&lt;div&gt;Model weights&lt;/div&gt;&lt;div&gt;Ansi-C include&lt;/div&gt;(...model.h)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="350" y="475" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-24" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="cQJqnNuV-BZ1jjLTNnZL-11" target="cQJqnNuV-BZ1jjLTNnZL-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cQJqnNuV-BZ1jjLTNnZL-11" value="Compiled into inference library&lt;br&gt;(Bitnet_inf.dll)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="342.5" y="580" width="135" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
