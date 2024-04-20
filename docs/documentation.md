@@ -111,7 +111,7 @@ For 2 and more bit quantization I chose to use symmetric encoding without zero, 
 ```
 To keep things simple, especially on side of the inference engine, I decided to use only fully connected layers and no CNN layers. To reduce memory footprint, the samples of the MNIST dataset are rescaled from 28x28 to 16x16 in size. This reduced resolution and lack of CNN layers will hamper achievable accuracy. But acceptable performance is still achievable, as shown later. The model structure is shown in the figure below.
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./Model.drawio.png" width="60%">
 </div>
 
@@ -125,7 +125,7 @@ The MNIST dataset with standard train/test split was used. Unless noted otherwis
 
 To investigate the efficacy of QAT, I trained the model with different bit-widths for weights and quantizated it to the same or smaller bitwidth before testing. I kept the network size at *w1=w2=w3=64* for all runs. 
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./prepostquant.png" width="60%">
 </div>
 
@@ -137,13 +137,13 @@ Advanced post-quantization schemes as used in LLMs could improve post-quantizati
 
 To deploy the model on a microcontroller, the model size should be kept as small as possible. The required memory footprint is proportional to the number of weights and the quantization level of the weights. To understand all tradeoffs I trained a large number of models with different widths and quantization levels, all using QAT. Typically, the width of all layers was kept the same. 
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./train_loss_vs_now.png" width="80%">
 </div>
 
 The plot above shows training loss vs. total number of weights. We can see that there is a polynomial relationship between the number of weights and the training loss. Reducing the number of bits per weigths increases the loss proportionally. Interestingly, there are diminishing returns when increasing the number of bits beyond 4 and loss is not reduced further. It appears that beyond 4 bit, no more information per weight can be stored in the model. 
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./train_loss_vs_totalbits.png" width="80%">
 </div>
 
@@ -159,11 +159,8 @@ Practically, this scaling relationship means that the number of bits per weight 
 
 The scaling relationship above allows prediciting train loss from model size. The plots below show the relationship between train and test loss and accuracy vs. model size.
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./train_vs_test_loss.png" width="70%">
-</div>
-
-<div style="text-align: center;">
     <img src="./train_vs_test_accuracy.png" width="70%">
 </div>
 
@@ -201,7 +198,7 @@ I trained the models with different learning schedules and for a varying number 
 
 The training loss and accuracy is shown above. As expected from the experiments above, all models perform similarly. The 8bit quantized model has the higher loss, again. We can see that longer training reduces the loss and increases the accuracy.
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./12kopt_test.png" width="90%">
 </div>
 
@@ -229,7 +226,7 @@ To improve the generalization of the model, and counter the overfitting, I I app
     ])
 ```	
 
-<div style="text-align: center;">
+<div align="center">
     <img src="./12kopt_augmented.png" width="90%">
 </div>
 
@@ -302,7 +299,7 @@ Key observations:
 
 These requirements can be met by the network architecture below. Each layer consists of a fully connected layer, followed by a fused block where normalization and ReLU are combined. Classification (maxpos) is performed before the ReLU operation in the same block, but the result is only used for the output layer.
 
-<div style="text-align: center;">
+<div align="center">
     <img src="Model_mcu.drawio.png" width="80%">
 </div>
  
@@ -456,7 +453,7 @@ To test inference of the actual model as a C-implementation, the inference code 
 
 The flow is shown in the figure below.
 
-<div style="text-align: center;">
+<div align="center">
     <img src="trainingpipeline.png" width="60%">
 </div>
 
