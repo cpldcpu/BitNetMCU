@@ -28,7 +28,9 @@ class FCMNIST(nn.Module):
             self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
         else:
             self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
-            
+
+        # self.conv1 = nn.Conv2d(1, 4, kernel_size=3, stride=2, padding=1, bias=False)
+
         # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         # self.dropout = nn.Dropout(0.10)
@@ -66,24 +68,34 @@ class CNNMNIST(nn.Module):
     CNN+FC Neural Network for MNIST dataset.
     16x16 input image, 3 hidden layers with a configurable width.
 
-    @cpldcpu 2024-Aprol-14
+    @cpldcpu 2024-April-19
 
     """
     def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
-        super(FCMNIST, self).__init__()
+        super(CNNMNIST, self).__init__()
+
+        self.network_width1 = network_width1
+        self.network_width2 = network_width2
+        self.network_width3 = network_width3
 
         self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
-        self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        if network_width3>0:
+            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        else:
+            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
-        # self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        # self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False, groups=1)
+        self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=2, padding=2,  groups=1,QuantType='QuantType',NormType=NormType, WScale=WScale)
+        self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=2, padding=2, groups=16,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2, bias=False)
-        self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=2, padding=2, bias=False, groups=1)
+        # self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=1, padding=2,  groups=1)
+        # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=1)
+
+
+        # self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2,  groups=1)
+        # self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=16)
 
 
         # self.dropout = nn.Dropout(0.10)
@@ -92,17 +104,15 @@ class CNNMNIST(nn.Module):
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv2(x))        
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
-        x = x.view(x.size(0), -1)
 
+        x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        # x = self.dropout(x)
+        if self.network_width3>0:
+            x = F.relu(self.fc3(x))
 
-        # x = F.relu(self.fc4(x))
         x = self.fcl(x)
         return x
-    
 
 class BitLinear(nn.Linear):
     """
@@ -138,11 +148,6 @@ class BitLinear(nn.Linear):
         self.QuantType = QuantType
         self.NormType = NormType
         self.WScale = WScale
-
-        # flat init - does not help so keep default
-        # fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-        # print(fan_in)
-        # init.uniform_(self.weight, -np.sqrt(2/fan_in), np.sqrt(2/fan_in))
 
     def forward(self, x):
         """
@@ -249,6 +254,156 @@ class BitLinear(nn.Linear):
         else:
             raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm'")
         return z
+
+class BitConv2d(nn.Conv2d):
+    """
+    Linear convolution layer with quantization aware training and normalization.
+    Configurable quantization and normalization types.
+
+    Quantization Types:
+    - Binary         : 1 bit
+    - Ternary        : 1.58 bits
+    - BinaryBalanced : 1 bit, weights are balanced around zero
+    - 2bitsym        : 2 bit symmetric
+    - 4bitsym        : 4 bit symmetric
+    - 8bit           : 8 bit
+
+    Normalization Types:
+    - RMS            : Root Mean Square
+    - Lin            : L1 Norm
+    - BatchNorm      : Batch Normalization
+
+    WScale 
+    - PerTensor      : The weight scaling is calculated per Tensor
+    - PerOutput      : The weight scaling is calculated per Output
+
+    Implementation based on:
+    https://github.com/microsoft/unilm/blob/master/bitnet/The-Era-of-1-bit-LLMs__Training_Tips_Code_FAQ.pdf
+    
+    @cpldcpu 2024-April-19
+    """
+    def __init__(self, in_channel, out_channels, kernel_size, stride, padding, groups=1,  QuantType='4bitsym', WScale='PerTensor', NormType='RMS'):
+        super(BitConv2d, self).__init__(in_channel, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups, bias=False)
+
+        self.QuantType = QuantType
+        self.NormType = NormType
+        self.WScale = WScale
+        self.groups = groups
+        self.stride = stride
+        self.padding = padding
+
+    def forward(self, x):
+        """
+        Args:
+        x: an input tensor with shape [n, d]
+        Returns:
+        y: an output tensor with shape [n, k]
+        """
+        w = self.weight # a weight tensor with shape [d, k]
+        x_norm = self.Normalize(x)
+        
+        if self.QuantType == 'None':
+        # if 1:
+            # print (x_norm.shape, w.shape, self.groups, self.stride, self.padding)
+            y = F.conv2d(x_norm, w,  stride=self.stride, padding=self.padding, groups=self.groups )        
+        else:
+            # A trick for implementing Straight-Through-Estimator (STE) using detach()
+            x_quant = x_norm + (self.activation_quant(x_norm) - x_norm).detach()
+            w_quant = w + (self.weight_quant(w) - w).detach()
+            y = F.conv2d(x_quant, w_quant, groups=self.groups, stride=self.stride, padding=self.padding)
+        return y
+    
+        #     self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2, bias=False)
+        # self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=2, padding=2, bias=False, groups=1)
+
+    def activation_quant(self, x):
+        """ Per-token quantization to 8 bits. No grouping is needed for quantization.
+        Args:
+        x: an activation tensor with shape [n, d]
+        Returns:
+        y: a quantized activation tensor with shape [n, d]
+        """
+        scale = 127.0 / x.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
+        y = (x * scale).round().clamp_(-128, 127) / scale
+        return y
+
+    def weight_quant(self, w):
+        """ Per-tensor quantization.
+        Args:
+        w: a weight tensor with shape [d, k]
+        Returns:
+        u: a quantized weight with shape [d, k]
+        """
+        if self.WScale=='PerOutput':
+            mag = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5)
+            magmax = mag.max()
+            scalequant = (127.0*mag/magmax).round().clamp_(1,127)
+            # mag = scalequant * magmax / 127.0
+        elif self.WScale=='PerTensor':
+            mag = w.abs().mean().clamp_(min=1e-5)
+        else:
+            raise AssertionError(f"Invalid WScale: {self.WScale}. Expected one of: 'PerTensor', 'PerOutput'")
+
+        if self.QuantType == 'Ternary': # 1.58bits
+            scale = 1.0 / mag
+            u = (w * scale).round().clamp_(-1, 1) / scale
+        elif self.QuantType == 'Ternary06': # 1 bit
+            scale = 0.6 / mag
+            u = (w * scale).round().clamp_(-1, 1) / scale
+        elif self.QuantType == 'Ternary4': # 1 bit
+            scale = 4 / mag
+            u = (w * scale).round().clamp_(-1, 1) / scale
+        elif self.QuantType == 'Binary': # 1 bit
+            scale = mag
+            e = w.mean()
+            u = (w - e).sign() * scale
+        elif self.QuantType == 'BinarySym': # 1 bit
+            scale = mag
+            # e = w.mean()
+            u = w.sign() * scale
+        elif self.QuantType == 'BinarySymHS': # 1 bit
+            scale = mag
+            u = w.sign() * scale * 0.5
+        elif self.QuantType == 'BinarySymDS': # 1 bit
+            scale = mag
+            u = w.sign() * scale * 2.0
+        elif self.QuantType == '2bitsym':
+            scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
+        elif self.QuantType == '4bitsym':
+            scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
+            u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
+        elif self.QuantType == '5bitsym':
+            scale = 4.0 / mag # 4.0 for tensor, 13 for output
+            u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5) / scale        
+        elif self.QuantType == '8bit':
+            scale = 32.0 / mag
+            u = (w * scale).round().clamp_(-128, 127) / scale   
+        else:
+            raise AssertionError(f"Invalid QuantType: {self.QuantType}. Expected one of: 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit'")
+        
+        return u
+
+    def Normalize(self, x):
+        """ Normalization. Normalizes along the last dimension -> different normalization value for each activation vector.
+        Args:
+        x: an input tensor with shape [n, d]
+        Returns:
+        y: a normalized tensor with shape [n, d]
+        """
+        if self.NormType == 'RMS':
+            # y = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True))
+            y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))
+            z =x / y
+        # elif self.NormType == 'Lin':
+        #     y = torch.mean(torch.abs(x), dim=-1, keepdim=True)
+        #     z =x / y
+        # elif self.NormType == 'BatchNorm':
+        #     z = (x - torch.mean(x, dim=-1, keepdim=True)) / (torch.std(x, dim=-1, keepdim=True) + 1e-5)
+        else:
+            raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm'")
+        return z
+
 
 class QuantizedModel:
     """
