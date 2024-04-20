@@ -1,6 +1,6 @@
-num_epochs: 30
-QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
-BPW : 4
+num_epochs: 60
+QuantType: '2bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
+BPW : 2
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
 WScale: 'PerTensor' # 'PerTensor', 'PerOutput', 'PerOutputLog2'
 batch_size: 128
@@ -8,10 +8,10 @@ scheduler: "Cosine" # "StepLR", "Cosine"
 learning_rate: 0.001
 lr_decay: 0.1     # lr_decay and step size are not used with cosine scheduler
 step_size: 10
-network_width1: 64
-network_width2: 64
-network_width3: 64
-augmentation: True
+network_width1: 16
+network_width2: 16
+network_width3: 16
+augmentation: False
 rotation1: 10  # rotation1 and rotation2 are used for data augmentation
 rotation2: 10
-runtag: "opt_" # runtag is prefix for runname
+runtag: "pdk_" # runtag is prefix for runname

@@ -27,12 +27,12 @@ def export_test_data_to_c(test_loader, filename, num=8):
             input_data = input_data.view(input_data.size(0), -1).cpu().numpy()
             labels = labels.cpu().numpy()
 
-            scale = 127.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
-            scaled_data = np.round(input_data * scale).clip(-128, 127)
+            scale = 31.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
+            scaled_data = np.round(input_data * scale).clip(-31, 31)
 
             # Convert to C array declarations
             for j, data in enumerate(scaled_data):
-                f.write(f'int8_t input_data_{i}[256] = ' + '{' + ', '.join(map(str, data.flatten())) + '};\n')
+                f.write(f'int8_t input_data_{i}[64] = ' + '{' + ', '.join(map(str, data.flatten())) + '};\n')
 
             f.write(f'uint8_t label_{i} = ' + str(labels[0]) + ';\n')
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     # Load the MNIST dataset
     transform = transforms.Compose([
-        transforms.Resize((16, 16)),  # Resize images to 16x16
+        transforms.Resize((8, 8)),  # Resize images to 16x16
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ])
@@ -116,7 +116,7 @@ if __name__ == '__main__':
 
     test_loader2 = DataLoader(test_data, batch_size=1, shuffle=True)    
 
-    # export_test_data_to_c(test_loader2, 'BitNetMCU_MNIST_test_data.h', num=10)
+    export_test_data_to_c(test_loader2, 'BitNetMCU_MNIST_test_data.h', num=10)
 
     lib = CDLL('./Bitnet_inf.dll')
 

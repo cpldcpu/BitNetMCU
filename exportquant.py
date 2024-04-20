@@ -14,7 +14,7 @@ import yaml
 # Note: Hyperparameters are used to generated the filename
 #---------------------------------------------
 
-showplots = True # display plots with statistics
+showplots = False # display plots with statistics
 
 def create_run_name(hyperparameters):
     runname = hyperparameters["runtag"] + hyperparameters["scheduler"] + '_lr' + str(hyperparameters["learning_rate"]) + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
@@ -64,8 +64,8 @@ def export_to_hfile(quantized_model, filename, runname):
             weights = np.array(layer_info['quantized_weights'])
             quantization_type = layer_info['quantization_type']
 
-            if (bpw*incoming_weights%32) != 0:
-                raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
+            if (bpw*incoming_weights%8) != 0:
+                raise ValueError(f"Size mismatch: Incoming weights must be packed to 8bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
             print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
             if quantization_type == 'Binary':
@@ -78,9 +78,9 @@ def export_to_hfile(quantized_model, filename, runname):
                 print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
 
             # pack bits into 32 bit words
-            weight_per_word = 32 // bpw 
+            weight_per_word = 8 // bpw 
             reshaped_array = encoded_weights.reshape(-1, weight_per_word)
-            bit_positions = 32 - bpw - np.arange(weight_per_word) * bpw
+            bit_positions = 8 - bpw - np.arange(weight_per_word) * bpw
             packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(np.uint32)
 
             # print(f'weights: {weights.shape} {weights.flatten()[0:16]}')
@@ -95,7 +95,7 @@ def export_to_hfile(quantized_model, filename, runname):
             f.write(f'#define {layer}_bitperweight {bpw}\n')
             f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
             f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
-            f.write(f'const uint32_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
+            f.write(f'const uint8_t {layer}_weights[] = {{{", ".join(map(lambda x: hex(x), packed_weights.flatten()))}}};\n//first channel is topmost bit\n\n')
         
         f.write('#endif\n')
 
@@ -152,7 +152,7 @@ def plot_weights(quantized_model):
     first_layer_weights = np.array(quantized_model.quantized_model[0]['quantized_weights'])
 
     # Step 2: Reshape the weights into a 16x16 grid for each output channel
-    reshaped_weights = first_layer_weights.reshape(-1, 16, 16)
+    reshaped_weights = first_layer_weights.reshape(-1, 8, 8)
 
     # Calculate the number of output channels
     num_channels = reshaped_weights.shape[0]
@@ -218,7 +218,7 @@ if __name__ == '__main__':
 
     # Load the MNIST dataset
     transform = transforms.Compose([
-        transforms.Resize((16, 16)),  # Resize images to 16x16
+        transforms.Resize((8, 8)),  # Resize images to 16x16
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ])
@@ -226,7 +226,8 @@ if __name__ == '__main__':
     train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
     test_data = datasets.MNIST(root='data', train=False, transform=transform)
     # Create data loaders
-    test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
+    # test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
+    test_loader = DataLoader(test_data, batch_size=len(test_data), shuffle=False)
 
     # Initialize the network and optimizer
     model = FCMNIST(

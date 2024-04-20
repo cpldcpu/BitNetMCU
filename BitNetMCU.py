@@ -21,10 +21,11 @@ class FCMNIST(nn.Module):
         self.network_width2 = network_width2
         self.network_width3 = network_width3
 
-        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc1 = BitLinear(1* 1 *8 *8, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
         if network_width3>0:
             self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
             self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
         else:
             self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
@@ -38,6 +39,7 @@ class FCMNIST(nn.Module):
         x = F.relu(self.fc2(x))
         if self.network_width3>0:
             x = F.relu(self.fc3(x))
+            # x = F.relu(self.fc4(x))
         # x = self.dropout(x)
 
         # x = F.relu(self.fc4(x))
@@ -375,8 +377,8 @@ class QuantizedModel:
         if not self.quantized_model:
             raise ValueError("quantized_model is empty or None")
 
-        scale = 127.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
-        current_data = np.round(input_data * scale).clip(-128, 127) 
+        scale = 31.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
+        current_data = np.round(input_data * scale).clip(-31, 31) 
 
         for layer_info in self.quantized_model[:-1]:  # For all layers except the last one
             weights = np.array(layer_info['quantized_weights']) 
@@ -387,6 +389,7 @@ class QuantizedModel:
                 conv = conv * scale
 
             max = np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
+            # print(layer_info['layer_order'], max.max(), max.min())
             rescale = np.exp2(np.floor(np.log2(127.0 / max))) # Emulate normalization by shift as in C inference engine
             # rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)   # Normalize to max 1.7 range
             current_data = np.round(conv * rescale).clip(0, 127)  # Quantize the output and ReLU

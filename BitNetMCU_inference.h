@@ -12,7 +12,7 @@
  * @return The position of maximum value found in the input array before applying the ReLU activation.
  */
 
-uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_inpu);
+uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_input,uint32_t shift);
 
 
 /**
@@ -28,6 +28,6 @@ uint32_t ReLUNorm(int32_t *input, int8_t *output, uint32_t n_inpu);
  * @param n_output The number of output neurons.
  * @param output Pointer to the output array where the result of the layer is stored.
  */
-void processfclayer(int8_t *input, const uint32_t *weights, int32_t bits_per_weight, uint32_t incoming_weights, uint32_t outgoing_weights, int32_t *output);
+uint8_t processfclayer(int8_t *input, const uint8_t *weights, int32_t bits_per_weight, uint32_t incoming_weights, uint32_t outgoing_weights, int8_t *output, uint8_t shift);
 
 #endif // BITNETMCU_INFERENCE_H
