@@ -1,6 +1,6 @@
 # BitNetMCU
 
-**Training and Inference of Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
+**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
 - [Introduction and Motivation](#introduction-and-motivation)
   - [Background](#background)
 - [Implementation of training code](#implementation-of-training-code)
