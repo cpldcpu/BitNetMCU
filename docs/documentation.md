@@ -215,7 +215,20 @@ The loss and accuracy for different learning run epochs are displayed above. The
 
 Interestingly, the test accuracy trend is now reversed, with higher bit quantization showing a slight advantage, despite identical total model sizes. The reason for this is not entirely clear.
 
-I was able to achieve almost 99.0% accuracy with 4-bit quantization after tweaking the data augmentation parameters slightly. Further improvements might require a different model architecture, such as a CNN. However, to keep things simple, I will stop here. The 99.0% accuracy already surpasses most (all?) other MNIST inference implementations I have seen on low-end MCUs such as AVR.
+<p align="center">
+    <img src="./explorationaugmented.png" width="80%">
+</p>
+
+The plot above shows further model structure exploration with fine-tuned data-augmentation and 60 epochs. Notably, the monotonic relationship between test accuracy and model size is even maintained when the depth is reduced from 4 layers to 3 layers. The labels show the widths of the hidden activation layers and the quantization level.
+
+There are two exceptions, labels highlighted in bold:
+
+1. The 8-bit quantization deviates from the trend, even with extended training. Judging from the gap to the trend, it appears that between 5 and 6 bits of the 8-bit parameters are effectively used.
+
+2. The structure with a tapered width (64/40/32/4b) seems to introduce a bottleneck that reduces accuracy.
+
+
+I was able to achieve >99% accuracy with 4-bit quantization after slightly tweaking the data augmentation parameters. The best trade-off appears to be the 64/64/64/4b structure. Further improvements might require a different model architecture, such as a CNN. However, to keep things simple, I will stop here. 99.0% accuracy already surpasses most (if not all) other MNIST inference implementations I have seen on low-end MCUs such as AVR.
 
 ## Summary of Learnings from Training
  
@@ -236,13 +249,11 @@ I visualized the weights of the first layer of the model trained with data augme
     <img src="./first_layer_weights.png" width="60%">
 </p>
 
-
 In contrast, the visualization below represents the first layer weights of the model trained without data augmentation. The weights seem less structured and appear more random. Instead of learning general features, the network seems to tend to fit directly to the images, as suggested by the discernible shapes of numbers.
 
 <p align="center">
     <img src="./first_layer_weights_noaugment.png" width="60%">
 </p>
-
 
 ## Addendum: Potential of Additional CNN layers
 
