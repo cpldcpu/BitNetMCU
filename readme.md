@@ -33,9 +33,9 @@ The data pipeline is split into several Python scripts for flexibility:
 
 2. **Training the Model**: The `training.py` script is used to train the model and store it as a `.pth` file in the `modeldata/` folder. The model weights are still in float format at this stage, as they are quantized on-the-fly during training.
 
-2. **Exporting the Quantized Model**: The `exportquant.py` script is used to convert the model into a quantized format. The quantized model is exported to a C header file.
+2. **Exporting the Quantized Model**: The `exportquant.py` script is used to convert the model into a quantized format. The quantized model is exported to the C header file `BitNetMCU_model.h`.
 
-3. **Optional: Testing the C-Model**: Compile and execute `BitNetMCU_MNIST_test.c` to test inference of ten digits. The model data is loaded from the header file, and the test data is included from the `BitNetMCU_MNIST_test_data.h` file. 
+3. **Optional: Testing the C-Model**: Compile and execute `BitNetMCU_MNIST_test.c` to test inference of ten digits. The model data is included from `BitNetMCU_MNIST_test_data.h`, and the test data is included from the `BitNetMCU_MNIST_test_data.h` file. 
 
 4. **Optional: Verification C vs Python Model on full dataset**: The inference code, along with the model data, is compiled into a DLL. The `test-inference.py` script calls the DLL and compares the results with the original Python model. This allows for an accurate comparison to the entire MNIST test data set of 10,000 images.
 
