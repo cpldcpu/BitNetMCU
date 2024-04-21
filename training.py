@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from BitNetMCU import FCMNIST, CNNMNIST
+from BitNetMCU import FCMNIST
 import time
 import random
 import argparse
