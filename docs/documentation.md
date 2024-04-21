@@ -243,9 +243,12 @@ In contrast, the visualization below represents the first layer weights of the m
     <img src="./first_layer_weights_noaugment.png" width="60%">
 </p>
 
-Since the weights of a CNN are exposed to many different features within the same image, it can learn generalized features much more effectively and less brute-force is required to prevent the model from overfitting.
 
 ## Addendum: Potential of Additional CNN layers
+
+Convolutional Neural Networks (CNNs) are typically preferred for image processing over fully connected networks due to their better performance. However, their implementation is more complex, which is why they were not included in this exploratory project.
+
+The weights of a CNN are exposed to many different features within the same image, enabling them to learn generalized features much more effectively. This makes them more robust against overfitting and reduces the need for data augmentation. Additionally, they trade higher computational effort for a smaller memory footprint, as the weights are shared across the image.
 
 To explore the potential of adding CNN layers, I added two 3x3 Conv2D layers to the model. The Conv2d layers were trained in float, while the fc layers were trained with 4-bit QAT. The model was trained with the same parameters as before (w1=w2=w3=64, augmentation, 60epochs).
 
@@ -259,7 +262,7 @@ To explore the potential of adding CNN layers, I added two 3x3 Conv2D layers to 
     x = F.max_pool2d(x, kernel_size=2, stride=2)
 ```
 
-This modification increased the test accuracy to above 99%. Memory-efficient depthwise convolution with similar parameters yielded similar results. More to follow up opon later...
+This modification increased the test accuracy to over 99%. Memory-efficient depthwise convolution with similar parameters yielded comparable results. Another topic to follow up opon later...
 
 # Architecture of the Inference Engine
 
@@ -520,12 +523,13 @@ The execution time is approximately 650,000 cycles, which corresponds to 13.66ms
 I also tested a smaller model with 4,512 2-bit parameters. Despite its size, it still achieves a 94.22% test accuracy. Due to its lower computational requirements, it executes in only 1.88ms.
 
 # Summary and Conclusions
+This marks the end of my journey to implement an MNIST inference engine with an impressive 99.02% test accuracy on a very limited $0.15 RISC-V microcontroller, which lacks a multiplication instruction and has only 16KB of flash memory and 2KB of RAM.
 
-This concludes my journey to implement an MNIST inference engine with an impressive 99.02% test accuracy on a very limited $0.15 RISC-V microcontroller, which lacks a multiplication instruction and has only 16KB of flash memory and 2KB of RAM.
+This achievement was made possible by employing Quantization Aware Training (QAT) in connection with low-bit quantization and precise model capacity tuning. An interesting observation, which I had not seen so clearly elsewhere, is that at the capacity limit, it's feasible to trade the number of bits per weight for the number of weights. The inference accuracy could be predicted by the total number of bits used for the weights within certain limits. There was a slight improvement in performance when using 4-bit quantization over lower bit quantization. 8-bit quantization offered diminishing returns and only stored about 5 bits of equivalent information per weight.
 
-This was possible by employing Quantization Aware Training (QAT) in combination with low-bit quantization and accurate model capacity tuning.  By simplifying the model architecture and a full-custom implementation I side-stepped the usual complexities and overhead associated with Edge-ML inference engines.
+By simplifying the model architecture and using a full-custom implementation, I bypassed the usual complexities and memory overhead associated with Edge-ML inference engines.
 
-While this project focused on MNIST inference as a test case, I hope to use this approach for other applications in the future.
+While this project focused on MNIST inference as a test case, I plan to apply this approach to other applications in the future.
 
 # References
 
