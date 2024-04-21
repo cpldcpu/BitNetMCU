@@ -225,7 +225,7 @@ There are two exceptions, labels highlighted in bold:
 
 1. The 8-bit quantization deviates from the trend, even with extended training. Judging from the gap to the trend, it appears that between 5 and 6 bits of the 8-bit parameters are effectively used.
 
-2. The structure with a tapered width (64/40/32/4b) seems to introduce a bottleneck that reduces accuracy.
+2. The structure with a tapered width (64/48/32/4b) seems to introduce a bottleneck that reduces accuracy.
 
 
 I was able to achieve >99% accuracy with 4-bit quantization after slightly tweaking the data augmentation parameters. The best trade-off appears to be the 64/64/64/4b structure. Further improvements might require a different model architecture, such as a CNN. However, to keep things simple, I will stop here. 99.0% accuracy already surpasses most (if not all) other MNIST inference implementations I have seen on low-end MCUs such as AVR.
@@ -527,7 +527,7 @@ Example output for inference with a 25126 4-bit parameter model is shown below.
 
 The execution time is approximately 650,000 cycles, which corresponds to 13.66ms at a 48MHz main clock. This is equivalent to 3.69 million operations per second ("MOPS"). The model achieves a test accuracy of 99.02%, which is quite impressive for such a small microcontroller and surpasses all other MCU-based MNIST implementations I have encountered.
 
-I also tested a smaller model with 4,512 2-bit parameters. Despite its size, it still achieves a 94.22% test accuracy. Due to its lower computational requirements, it executes in only 1.88ms.
+I also tested a smaller model with 4512 2-bit parameters. Despite its size, it still achieves a 94.22% test accuracy. Due to its lower computational requirements, it executes in only 1.88ms.
 
 # Summary and Conclusions
 This marks the end of my journey to implement an MNIST inference engine with an impressive 99.02% test accuracy on a very limited $0.15 RISC-V microcontroller, which lacks a multiplication instruction and has only 16KB of flash memory and 2KB of RAM.
@@ -539,6 +539,8 @@ By simplifying the model architecture and using a full-custom implementation, I 
 While this project focused on MNIST inference as a test case, I plan to apply this approach to other applications in the future.
 
 # References
+
+References and further reading:
 
 [^1]: S. Ma et al *The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits* ([arXiv:2402.17764](https://arxiv.org/abs/2402.17764)) and [discussion here](https://huggingface.co/papers/2402.17764) 
 
