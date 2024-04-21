@@ -123,35 +123,26 @@ if __name__ == '__main__':
     lib = CDLL('./Bitnet_inf.dll')
 
     for input_data, labels in test_loader2:
-        # Reshape and convert to numpy
         input_data = input_data.view(input_data.size(0), -1).cpu().numpy()
         labels = labels.cpu().numpy()
 
         scale = 127.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
         scaled_data = np.round(input_data * scale).clip(-128, 127) 
 
-        input_data_ctypes = (c_int8 * len(scaled_data.flatten()))(*scaled_data.astype(np.int8).flatten())
-
         # Create a pointer to the ctypes array
-        input_data_pointer = POINTER(c_int8)(input_data_ctypes)
+        input_data_pointer = (c_int8 * len(scaled_data.flatten()))(*scaled_data.astype(np.int8).flatten())
 
         lib.Inference.argtypes = [POINTER(c_int8)]
         lib.Inference.restype = c_uint32
 
+        # Inference C
         result_c = lib.Inference(input_data_pointer)
 
-    # Inference
+        # Inference Python
         result_py = quantized_model.inference_quantized(input_data)
         predict_py = np.argmax(result_py, axis=1)
 
         activations = quantized_model.get_activations(input_data)
-
-        # weights = np.array(quantized_model.quantized_model[0]['quantized_weights'])
-        # print(weights.shape)
-        # print(f'weights: {weights[0]}')
-        # print(f'Activations: {activations[0]} len: {len(activations[0][0])}')
-        # print(f'Activations: {activations[1]} len: {len(activations[1][0])}')
-        # exit()
 
         if (result_c == labels[0]):
             correct_c += 1
@@ -160,7 +151,7 @@ if __name__ == '__main__':
             correct_py += 1
 
         if (result_c != predict_py[0]):
-            print(f'Mismatch between inference engines found. Preduction C: {result_c} Prediction Python: {predict_py[0]} True: {labels[0]}')
+            print(f'Mismatch between inference engines found. Prediction C: {result_c} Prediction Python: {predict_py[0]} True: {labels[0]}')
             mismatch +=1
 
         counter += 1
