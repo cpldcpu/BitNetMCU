@@ -29,9 +29,8 @@ class FCMNIST(nn.Module):
         else:
             self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
             
-        # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
-
         # self.dropout = nn.Dropout(0.10)
+
     def forward(self, x):
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
@@ -39,71 +38,9 @@ class FCMNIST(nn.Module):
         if self.network_width3>0:
             x = F.relu(self.fc3(x))
         # x = self.dropout(x)
-
-        # x = F.relu(self.fc4(x))
         x = self.fcl(x)
         return x
     
-    def get_activations(self, x):
-        x = x.view(x.size(0), -1)
-
-        x1 = F.relu(self.fc1(x))
-        x2 = F.relu(self.fc2(x1))
-        x3 = F.relu(self.fc3(x2))
-        x4 = self.fcl(x3)
-        return x1,x2,x3,x4
-
-    def get_quantized_weights(self):
-
-        x1 = self.fc1.activation_quant(self.fc1.weight)
-        x2 = self.fc2.activation_quant(self.fc2.weight)
-        x3 = self.fc3.activation_quant(self.fc3.weight)
-        x4 = self.fcl.activation_quant(self.fcl.weight)
-        return x1,x2,x3,x4
-
-class CNNMNIST(nn.Module):
-    """
-    CNN+FC Neural Network for MNIST dataset.
-    16x16 input image, 3 hidden layers with a configurable width.
-
-    @cpldcpu 2024-Aprol-14
-
-    """
-    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
-        super(FCMNIST, self).__init__()
-
-        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        # self.fc4 = BitLinear(network_width3, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
-
-        self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
-
-        # self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        # self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False, groups=1)
-
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2, bias=False)
-        self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=2, padding=2, bias=False, groups=1)
-
-
-        # self.dropout = nn.Dropout(0.10)
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        # x = F.max_pool2d(x, kernel_size=2, stride=2)
-        x = F.relu(self.conv2(x))        
-        # x = F.max_pool2d(x, kernel_size=2, stride=2)
-        x = x.view(x.size(0), -1)
-
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        # x = self.dropout(x)
-
-        # x = F.relu(self.fc4(x))
-        x = self.fcl(x)
-        return x
-    
-
 class BitLinear(nn.Linear):
     """
     Linear convolution layer with quantization aware training and normalization.
