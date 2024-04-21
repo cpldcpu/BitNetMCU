@@ -510,13 +510,9 @@ Four test cases are evaluated, and the execution timing is measured using the in
 
 Example output for inference with a 25126 4-bit parameter model is shown below.
 
-```
-Starting MNIST inference...
-Inference of Sample 1  Prediction: 7  Label: 7  Timing: 655433 clock cycles
-Inference of Sample 2  Prediction: 1  Label: 1  Timing: 647093 clock cycles
-Inference of Sample 3  Prediction: 9  Label: 9  Timing: 639987 clock cycles
-Inference of Sample 4  Prediction: 4  Label: 4  Timing: 650411 clock cycles
-```
+<div align="center">
+    <img src="../mcu/console.png" width="80%">
+</div>
 
 The execution time is approximately 650,000 cycles, which corresponds to 13.66ms at a 48MHz main clock. This is equivalent to 3.69 million operations per second ("MOPS"). The model achieves a test accuracy of 99.02%, which is quite impressive for such a small microcontroller and surpasses all other MCU-based MNIST implementations I have encountered.
 
