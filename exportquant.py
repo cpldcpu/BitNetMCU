@@ -105,6 +105,19 @@ def export_to_hfile(quantized_model, filename, runname):
            
         f.write('#endif\n')
 
+def plot_test_images(test_loader):
+    dataiter = iter(test_loader)
+    images, labels = next(dataiter)
+
+    fig, axes = plt.subplots(5, 5, figsize=(8, 8))
+
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(images[i].numpy().squeeze(), cmap='gray')
+        ax.set_title(f'Label: {labels[i]}')
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show() 
 
 def print_stats(quantized_model):
     for layer_info in quantized_model.quantized_model:
@@ -234,6 +247,8 @@ if __name__ == '__main__':
     # Create data loaders
     test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
 
+    # plot_test_images(test_loader)
+
     # Initialize the network and optimizer
     model = FCMNIST(
         network_width1=hyperparameters["network_width1"], 
@@ -276,6 +291,7 @@ if __name__ == '__main__':
         plot_weights(quantized_model)
         # plot_statistics(quantized_model)
         # plot_weight_histograms(quantized_model)
+        # plot_test_images(test_loader)
 
     print(f'Total number of bits: {quantized_model.totalbits()} ({quantized_model.totalbits()/8/1024} kbytes)')
 
