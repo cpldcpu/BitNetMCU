@@ -4,6 +4,10 @@
 
 **You can find a detailed report on the project in the `docs/` directory [here](docs/documentation.md).**
 
+<div align="center">
+    <img src="docs/header.png" width="95%">
+</div>
+
 ## Project Structure
 
 ```
