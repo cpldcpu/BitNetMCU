@@ -217,8 +217,10 @@ class BitLinear(nn.Linear):
             scale = mag
             u = w.sign() * scale * 2.0
         elif self.QuantType == '2bitsym':
-            scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
+            scale = 2.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+#            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.0) / scale
+            u = ((((w * scale).abs() + 0.5).round())-0.0).clamp_(-2, 2)  / scale
+            u = u * w.sign()
         elif self.QuantType == '4bitsym':
             scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
@@ -320,12 +322,14 @@ class QuantizedModel:
                     u = (w - e).sign() 
                     bpw = 1
                 elif QuantType == '2bitsym':
-                    scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-                    u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
+                    scale = 2.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+                    u = (((w * scale).abs() + 0.5).round()-0.0).clamp_(-2, 2) 
+                    u = u * w.sign()
+#                    u = (((w * scale) - 1.0).round().clamp_(-2, 1) + 1.0) 
                     bpw = 2
                 elif QuantType == '4bitsym':
-                    scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
-                    u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) 
+                    scale = 2.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+                    u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.0) / scale
                     bpw = 4
                 elif QuantType == '5bitsym':
                     scale = 4.0 / mag # 4.0 for tensor, 14 for output
