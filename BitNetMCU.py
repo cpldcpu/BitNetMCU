@@ -216,10 +216,16 @@ class BitLinear(nn.Linear):
         elif self.QuantType == 'BinarySymDS': # 1 bit
             scale = mag
             u = w.sign() * scale * 2.0
+        elif QuantType == '2bit':
+            scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+            u = (((w * scale)).round()).clamp_(-2, 1) 
+#                    u = (((w * scale) - 1.0).round().clamp_(-2, 1) + 1.0) 
+            bpw = 2                    
         elif self.QuantType == '2bitsym':
-            scale = 2.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+            scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
 #            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.0) / scale
-            u = ((((w * scale).abs() + 0.5).round())-0.0).clamp_(-2, 2)  / scale
+            u = (((w * scale).abs() + 0.5).ceil()).clamp_(-2, 2) 
+        #   u = ((((w * scale).abs() + 1.0).round())-1.0).clamp_(-2, 2)  / scale
             u = u * w.sign()
         elif self.QuantType == '4bitsym':
             scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
@@ -321,9 +327,14 @@ class QuantizedModel:
                     e = w.mean()
                     u = (w - e).sign() 
                     bpw = 1
+                elif QuantType == '2bit':
+                    scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+                    u = (((w * scale)).round()).clamp_(-2, 1) 
+#                    u = (((w * scale) - 1.0).round().clamp_(-2, 1) + 1.0) 
+                    bpw = 2                    
                 elif QuantType == '2bitsym':
-                    scale = 2.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-                    u = (((w * scale).abs() + 0.5).round()-0.0).clamp_(-2, 2) 
+                    scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+                    u = (((w * scale).abs() + 0.5).ceil()).clamp_(-2, 2) 
                     u = u * w.sign()
 #                    u = (((w * scale) - 1.0).round().clamp_(-2, 1) + 1.0) 
                     bpw = 2
