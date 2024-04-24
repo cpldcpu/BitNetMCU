@@ -45,8 +45,3 @@ The data pipeline is split into several Python scripts for flexibility:
 
 5. **Optional: Testing inference on the MCU**: follow the instructions in  `mcu/readme.md`. Porting to architectures other than CH32V003 is straighfoward and the files in the `mcu` directory can serve as a reference
 
-
-## Contact
-
-For any questions or feedback, please reach out by opening an issue on this repository.
-
