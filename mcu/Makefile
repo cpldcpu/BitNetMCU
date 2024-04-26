@@ -2,9 +2,14 @@ all : build
 
 TARGET:=BitNetMCUdemo
 
-# Make sure the 'CH32V003FUN' environment variable is set and points to the ch32v003fun directory.
+# Use ch32v003fun as a submodule
+
+CH32V003FUN ?= ch32v003fun/ch32v003fun
+
+
 # Alternatively, set the path to the ch32v003fun directory here
-CH32V003FUN ?= /mnt/d/RISCV/ch32v003fun/ch32v003fun
+
+# CH32V003FUN ?= /mnt/d/RISCV/ch32v003fun/ch32v003fun
 
 include $(CH32V003FUN)/ch32v003fun.mk
 

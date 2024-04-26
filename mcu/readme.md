@@ -4,7 +4,7 @@ This folder contains a demo that implements the BitNetMCU inference engine on an
 
 ## 📁 File Descriptions
 
-- [`Makefile`](Makefile): Make sure to update the `CH32V003FUN` variable to point to the location of the ch32v003fun SDK on your system. This Makefile will compile the demo and flash it to the CH32V003 MCU. 
+- [`Makefile`](Makefile): The default makefile assumes that you clone ch32v003fun as a submodule. Alternatively, you can change thevariable `CH32V003FUN` in the makefile to point to an alternative installiation location. This Makefile will compile the demo and flash it to the CH32V003 MCU. 
 
 - [`funconfig.h`](funconfig.h): Configuration of main clock speed, and SysTick clock source for the CH32V003 MCU.
 
