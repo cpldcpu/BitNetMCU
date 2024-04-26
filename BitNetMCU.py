@@ -216,7 +216,7 @@ class BitLinear(nn.Linear):
         elif self.QuantType == 'BinarySymDS': # 1 bit
             scale = mag
             u = w.sign() * scale * 2.0
-        elif QuantType == '2bit':
+        elif self.QuantType == '2bit':
             scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
             u = (((w * scale)).round()).clamp_(-2, 1) 
 #                    u = (((w * scale) - 1.0).round().clamp_(-2, 1) + 1.0) 
