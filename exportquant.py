@@ -68,12 +68,19 @@ def export_to_hfile(quantized_model, filename, runname):
                 raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
             print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
+            
             if quantization_type == 'Binary':
                 encoded_weights = np.where(weights == -1, 0, 1)
+                QuantID = 1
             elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
                 encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+                QuantID = 2
             elif quantization_type == '4bitsym': 
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+                QuantID = 4
+            elif quantization_type == '4bitshift': # FP1.3.0 encoding (sign * 2^exp)
+                encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(int)  
+                QuantID = 16 + 4
             else:
                 print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
 
@@ -92,7 +99,7 @@ def export_to_hfile(quantized_model, filename, runname):
             f.write(f'// QuantType: {quantization_type}\n')
 
             f.write(f'#define {layer}_active\n')
-            f.write(f'#define {layer}_bitperweight {bpw}\n')
+            f.write(f'#define {layer}_bitperweight {QuantID}\n')
             f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
             f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
 
@@ -290,7 +297,7 @@ if __name__ == '__main__':
     if showplots:
         plot_weights(quantized_model)
         # plot_statistics(quantized_model)
-        # plot_weight_histograms(quantized_model)
+        plot_weight_histograms(quantized_model)
         # plot_test_images(test_loader)
 
     print(f'Total number of bits: {quantized_model.totalbits()} ({quantized_model.totalbits()/8/1024} kbytes)')
