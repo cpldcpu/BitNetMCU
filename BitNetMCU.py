@@ -78,7 +78,7 @@ class CNNMNIST(nn.Module):
         self.network_width2 = network_width2
         self.network_width3 = network_width3
 
-        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc1 = BitLinear(1* 1 *16 *8, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         if network_width3>0:
@@ -87,15 +87,19 @@ class CNNMNIST(nn.Module):
         else:
             self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
-        self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=2, padding=2,  groups=1,QuantType='QuantType',NormType=NormType, WScale=WScale)
-        self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=2, padding=2, groups=16,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        # self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=2, padding=2,  groups=1,QuantType='8bit',NormType=NormType, WScale=WScale)
+        # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=2, padding=2, groups=16,QuantType='8bit',NormType=NormType, WScale=WScale)
 
         # self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=1, padding=2,  groups=1)
         # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=1)
 
 
-        # self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2,  groups=1)
-        # self.conv2 = nn.Conv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=16)
+        self.conv1 = BitConv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1,QuantType='4bitsym',NormType=NormType, WScale=WScale)
+        self.conv2 = BitConv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8,QuantType='4bitsym',NormType=NormType, WScale=WScale)
+
+        # self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1)
+        # self.conv2 = nn.Conv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8)
+        # self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2, groups=32)
 
 
         # self.dropout = nn.Dropout(0.10)
@@ -103,6 +107,8 @@ class CNNMNIST(nn.Module):
         x = F.relu(self.conv1(x))
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv2(x))        
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        # x = F.relu(self.conv3(x))        
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
 
         x = x.view(x.size(0), -1)

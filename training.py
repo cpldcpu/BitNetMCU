@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from BitNetMCU import FCMNIST
+from BitNetMCU import FCMNIST, CNNMNIST
 import time
 import random
 
@@ -26,15 +26,15 @@ hyperparameters = {
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
     "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
-    "network_width3": 64,
+    "network_width1": 96, 
+    "network_width2": 96, 
+    "network_width3": 0,
     "Augmentation": True,
     "runname": ''
 }
 
 retrain = True  # Train or load model
-runtag = 'a11_Opt12k_cos'
+runtag = 'cnn_conv2dstd'
 #---------------------------------------------
 
 def create_run_name(hyperparameters):
@@ -188,7 +188,7 @@ if __name__ == '__main__':
         train_data = ConcatDataset([train_data, augmented_train_data])
 
     # Initialize the network and optimizer
-    model = FCMNIST(
+    model = CNNMNIST(
         network_width1=hyperparameters["network_width1"], 
         network_width2=hyperparameters["network_width2"], 
         network_width3=hyperparameters["network_width3"], 
