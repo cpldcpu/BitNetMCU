@@ -94,25 +94,29 @@ class CNNMNIST(nn.Module):
         # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=1)
 
 
-        self.conv1 = BitConv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1,QuantType='4bitsym',NormType=NormType, WScale=WScale)
-        self.conv2 = BitConv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8,QuantType='4bitsym',NormType=NormType, WScale=WScale)
+        self.conv1 = BitConv2d(1, 64, kernel_size=5, stride=1, padding=2,  groups=1,QuantType='8bit',NormType='None', WScale=WScale)
+        self.conv2 = BitConv2d(64, 8, kernel_size=5, stride=1, padding=2, groups=8,QuantType='8bit',NormType='None', WScale=WScale)
 
-        # self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1)
-        # self.conv2 = nn.Conv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8)
+        # self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1, bias=False)
+        # self.conv2 = nn.Conv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8, bias=False)
+
         # self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2, groups=32)
 
 
-        # self.dropout = nn.Dropout(0.10)
+        self.dropout = nn.Dropout(0.05)
+
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.max_pool2d(x, kernel_size=4, stride=4)
         x = F.relu(self.conv2(x))        
-        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
         # x = F.relu(self.conv3(x))        
         # x = F.max_pool2d(x, kernel_size=2, stride=2)
 
         x = x.view(x.size(0), -1)
+        # x = self.dropout(x)
         x = F.relu(self.fc1(x))
+        x = self.dropout(x)
         x = F.relu(self.fc2(x))
         if self.network_width3>0:
             x = F.relu(self.fc3(x))
@@ -306,8 +310,9 @@ class BitConv2d(nn.Conv2d):
         y: an output tensor with shape [n, k]
         """
         w = self.weight # a weight tensor with shape [d, k]
+        # print(x.shape, w.shape, self.groups, self.stride, self.padding)
         x_norm = self.Normalize(x)
-        
+        # x_norm = x
         if self.QuantType == 'None':
         # if 1:
             # print (x_norm.shape, w.shape, self.groups, self.stride, self.padding)
@@ -316,7 +321,8 @@ class BitConv2d(nn.Conv2d):
             # A trick for implementing Straight-Through-Estimator (STE) using detach()
             x_quant = x_norm + (self.activation_quant(x_norm) - x_norm).detach()
             w_quant = w + (self.weight_quant(w) - w).detach()
-            y = F.conv2d(x_quant, w_quant, groups=self.groups, stride=self.stride, padding=self.padding)
+            y = F.conv2d(x_quant, w_quant, groups=self.groups, stride=self.stride, padding=self.padding, bias=None)
+            # y = F.conv2d(x_norm, w, groups=self.groups, stride=self.stride, padding=self.padding, bias=None)
         return y
     
         #     self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2, bias=False)
@@ -329,8 +335,8 @@ class BitConv2d(nn.Conv2d):
         Returns:
         y: a quantized activation tensor with shape [n, d]
         """
-        scale = 127.0 / x.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
-        y = (x * scale).round().clamp_(-128, 127) / scale
+        scale = 32767.0 / x.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
+        y = (x * scale).round().clamp_(-32768, 32767) / scale
         return y
 
     def weight_quant(self, w):
@@ -399,13 +405,15 @@ class BitConv2d(nn.Conv2d):
         """
         if self.NormType == 'RMS':
             # y = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True))
-            y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))
-            z =x / y
+            y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))            
+            z = x / y
         # elif self.NormType == 'Lin':
         #     y = torch.mean(torch.abs(x), dim=-1, keepdim=True)
         #     z =x / y
         # elif self.NormType == 'BatchNorm':
         #     z = (x - torch.mean(x, dim=-1, keepdim=True)) / (torch.std(x, dim=-1, keepdim=True) + 1e-5)
+        elif self.NormType == 'None':
+            z = x
         else:
             raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm'")
         return z
