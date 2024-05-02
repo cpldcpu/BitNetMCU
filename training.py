@@ -9,6 +9,7 @@ from datetime import datetime
 from BitNetMCU import FCMNIST, CNNMNIST
 import time
 import random
+from torchsummary import summary
 
 #----------------------------------------------
 # BitNetMCU training
@@ -196,7 +197,11 @@ if __name__ == '__main__':
         NormType=hyperparameters["NormType"],
         WScale=hyperparameters["WScale"]
     ).to(device)
+    # Print the model summary
 
+    summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)
+    
+ 
     print('training...')
     train_model(model, device, hyperparameters, train_data, test_data)
 
