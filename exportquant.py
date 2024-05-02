@@ -72,6 +72,8 @@ def export_to_hfile(quantized_model, filename, runname):
                 encoded_weights = np.where(weights == -1, 0, 1)
             elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
                 encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+            elif quantization_type == '2bitirregular': # encoding -2 -> 11, -1 -> 10, 1 -> 00, 2 -> 01 (one complement with offset)
+                encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
             elif quantization_type == '4bitsym': 
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
             else:

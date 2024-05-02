@@ -1,6 +1,6 @@
-num_epochs: 60
-QuantType: 'Binary' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
-BPW : 1
+num_epochs: 30
+QuantType: '2bitirregular' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit', 'None", 'FP130' 
+BPW : 2
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
 WScale: 'PerTensor' # 'PerTensor', 'PerOutput', 'PerOutputLog2'
 batch_size: 128
