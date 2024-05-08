@@ -538,6 +538,18 @@ By simplifying the model architecture and using a full-custom implementation, I 
 
 While this project focused on MNIST inference as a test case, I plan to apply this approach to other applications in the future.
 
+# Addendum: FP1.3.0 Quantization
+
+<div align="center">
+    <img src="first_layer_weights_fp130.png" width="60%">
+</div>
+
+<div align="center">
+    <img src="fp130_export.png" width="80%">
+</div>
+
+TODO
+
 # References
 
 References and further reading:

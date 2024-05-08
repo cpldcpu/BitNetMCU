@@ -52,6 +52,7 @@ class BitLinear(nn.Linear):
     - BinaryBalanced : 1 bit, weights are balanced around zero
     - 2bitsym        : 2 bit symmetric
     - 4bitsym        : 4 bit symmetric
+    - FP130          : 4 bit shift encoding
     - 8bit           : 8 bit
 
     Normalization Types:
@@ -157,7 +158,7 @@ class BitLinear(nn.Linear):
         elif self.QuantType == '4bitsym':
             scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
-        elif self.QuantType ==  '4bitshift': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 127
+        elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 127
             scale = 16.0 / mag
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
             u = w.sign()*(e.exp2()) / scale            
@@ -266,7 +267,7 @@ class QuantizedModel:
                     scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
                     u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) 
                     bpw = 4
-                elif QuantType ==  '4bitshift': 
+                elif QuantType ==  'FP130': 
                     scale = 16.0 / mag 
                     e = ((w * scale ).abs()).log2().floor().clamp_(0, 7)
                     u = w.sign()*(e.exp2() )    

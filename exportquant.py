@@ -78,7 +78,7 @@ def export_to_hfile(quantized_model, filename, runname):
             elif quantization_type == '4bitsym': 
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
                 QuantID = 4
-            elif quantization_type == '4bitshift': # FP1.3.0 encoding (sign * 2^exp)
+            elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
                 encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(int)  
                 QuantID = 16 + 4
             else:

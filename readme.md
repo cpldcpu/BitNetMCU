@@ -1,6 +1,6 @@
 # BitNetMCU: High Accuracy Low-Bit Quantized Neural Networks on a low-end Microcontroller
 
-**BitNetMCU** is a project focused on the training and inference of low-bit quantized neural networks, specifically designed to run efficiently on low-end RISC-V microcontrollers like the CH32V003. Quantization aware training (QAT) and finetuning of model structure and inference code allowed *surpassing 99% Test accuracy on a 16x16 MNIST dataset without using multiplication instructions and in only 2kb of RAM and 16kb of Flash*.
+**BitNetMCU** is a project focused on the training and inference of low-bit quantized neural networks, specifically designed to run efficiently on low-end microcontrollers like the CH32V003. Quantization aware training (QAT) and fine-tuning of model structure and inference code allowed *surpassing 99% Test accuracy on a 16x16 MNIST dataset without using multiplication instructions and in only 2kb of RAM and 16kb of Flash*.
 
 The training pipeline is based on PyTorch and should run anywhere. The inference engine is implemented in Ansi-C and can be easily ported to any Microcontroller.
 
@@ -37,13 +37,18 @@ The data pipeline is split into several Python scripts for flexibility:
 
 1. **Configuration**: Modify `trainingparameters.yaml` to set all hyperparameters for training the model.
 
-2. **Training the Model**: The `training.py` script is used to train the model and store it as a `.pth` file in the `modeldata/` folder. The model weights are still in float format at this stage, as they are quantized on-the-fly during training.
+2. **Training the Model**: The `training.py` script is used to train the model and store the weights as a `.pth` file in the `modeldata/` folder. The model weights are still in float format at this stage, as they are quantized on-the-fly during training.
 
-2. **Exporting the Quantized Model**: The `exportquant.py` script is used to convert the model into a quantized format. The quantized model is exported to the C header file `BitNetMCU_model.h`.
+2. **Exporting the Quantized Model**: The `exportquant.py` script is used to convert the model into a quantized format. The quantized model weights are exported to the C header file `BitNetMCU_model.h`.
 
 3. **Optional: Testing the C-Model**: Compile and execute `BitNetMCU_MNIST_test.c` to test inference of ten digits. The model data is included from `BitNetMCU_MNIST_test_data.h`, and the test data is included from the `BitNetMCU_MNIST_test_data.h` file. 
 
 4. **Optional: Verification C vs Python Model on full dataset**: The inference code, along with the model data, is compiled into a DLL. The `test-inference.py` script calls the DLL and compares the results with the original Python model. This allows for an accurate comparison to the entire MNIST test data set of 10,000 images.
 
-5. **Optional: Testing inference on the MCU**: follow the instructions in  `mcu/readme.md`. Porting to architectures other than CH32V003 is straighfoward and the files in the `mcu` directory can serve as a reference
+5. **Optional: Testing inference on the MCU**: follow the instructions in  `mcu/readme.md`. Porting to architectures other than CH32V003 is straightforward and the files in the `mcu` directory can serve as a reference.
 
+## Updates
+
+- 24th April 2024 - First release with Binary, Ternary, 2 bit, 4 bit and 8 bit quantization. 
+- 2nd May 2024 - [tagged version 0.1a](https://github.com/cpldcpu/BitNetMCU/tree/0.1a)
+- 8th May 2024 - Added FP1.3.0 Quantization to allow fully multiplication-free inference with 98.9% accuracy. 
