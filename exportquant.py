@@ -69,17 +69,19 @@ def export_to_hfile(quantized_model, filename, runname):
 
             print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
             
+            data_type = np.uint32
+            
             if quantization_type == 'Binary':
                 encoded_weights = np.where(weights == -1, 0, 1)
                 QuantID = 1
             elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
-                encoded_weights = ((weights < 0).astype(int) << 1) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+                encoded_weights = ((weights < 0).astype(data_type) << 1) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                 QuantID = 2
             elif quantization_type == '4bitsym': 
-                encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.abs(weights))).astype(int)  # use bitwise operations to encode the weights
+                encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                 QuantID = 4
             elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
-                encoded_weights = ((weights < 0).astype(int) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(int)  
+                encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
                 QuantID = 16 + 4
             else:
                 print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
@@ -87,9 +89,10 @@ def export_to_hfile(quantized_model, filename, runname):
             # pack bits into 32 bit words
             weight_per_word = 32 // bpw 
             reshaped_array = encoded_weights.reshape(-1, weight_per_word)
-            bit_positions = 32 - bpw - np.arange(weight_per_word) * bpw
-            packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(np.uint32)
-
+            
+            bit_positions = 32 - bpw - np.arange(weight_per_word, dtype=data_type) * bpw
+            packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(data_type)
+            
             # print(f'weights: {weights.shape} {weights.flatten()[0:16]}')
             # print(f'Encoded weights: {encoded_weights.shape} {encoded_weights.flatten()[0:16]}')
             # print(f'Packed weights: {packed_weights.shape} {", ".join(map(lambda x: hex(x), packed_weights.flatten()[0:4]))}')
@@ -338,4 +341,6 @@ if __name__ == '__main__':
     # export the quantized model to a header file
     # export_to_hfile(quantized_model, f'{exportfolder}/{runname}.h')
     export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname)
-    plt.show()
+    
+    if showplots:
+        plt.show()

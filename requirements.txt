@@ -2,3 +2,5 @@ torch
 torchvision
 numpy
 PyYAML
+tensorboard
+matplotlib
