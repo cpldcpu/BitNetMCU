@@ -78,7 +78,7 @@ class CNNMNIST(nn.Module):
         self.network_width2 = network_width2
         self.network_width3 = network_width3
 
-        self.fc1 = BitLinear(1* 1 *16 *8, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc1 = BitLinear(1* 1 *36 *4, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         if network_width3>0:
@@ -94,8 +94,12 @@ class CNNMNIST(nn.Module):
         # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=1)
 
 
-        self.conv1 = BitConv2d(1, 64, kernel_size=5, stride=1, padding=2,  groups=1,QuantType='8bit',NormType='None', WScale=WScale)
-        self.conv2 = BitConv2d(64, 8, kernel_size=5, stride=1, padding=2, groups=8,QuantType='8bit',NormType='None', WScale=WScale)
+        # self.conv1 = BitConv2d(1, 64, kernel_size=5, stride=1, padding=2,  groups=1,QuantType='8bit',NormType='None', WScale=WScale)
+        # self.conv2 = BitConv2d(64, 8, kernel_size=5, stride=1, padding=2, groups=8,QuantType='8bit',NormType='None', WScale=WScale)
+
+        self.conv1 = BitConv2d(1, 32, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
+        self.conv2 = BitConv2d(32, 4, kernel_size=3, stride=1, padding=0, groups=4,QuantType='4bitsym',NormType='None', WScale=WScale)
+
 
         # self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1, bias=False)
         # self.conv2 = nn.Conv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8, bias=False)
@@ -107,7 +111,7 @@ class CNNMNIST(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, kernel_size=4, stride=4)
+        # x = F.max_pool2d(x, kernel_size=4, stride=4)
         x = F.relu(self.conv2(x))        
         x = F.max_pool2d(x, kernel_size=2, stride=2)
         # x = F.relu(self.conv3(x))        

@@ -27,7 +27,7 @@ hyperparameters = {
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
     "step_size": 10,
-    "network_width1": 128, 
+    "network_width1": 96, 
     "network_width2": 48, 
     "network_width3": 0,
     "Augmentation": True,
@@ -35,7 +35,7 @@ hyperparameters = {
 }
 
 retrain = True  # Train or load model
-runtag = 'cnn_conv2dstd'
+runtag = 'cnn_conv2'
 #---------------------------------------------
 
 def create_run_name(hyperparameters):
