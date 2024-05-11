@@ -13,8 +13,15 @@
  * @return The result of the inference.
  */
 
+uint32_t BitMnistInference(int8_t *input);
+
 #ifdef _DLL
-__declspec(dllexport) uint32_t Inference(int8_t *input) {
+#ifdef WIN32
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT __attribute__((visibility("default")))
+#endif
+EXPORT uint32_t Inference(int8_t *input) {
     return BitMnistInference(input);
 }
 #endif
