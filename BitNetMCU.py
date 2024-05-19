@@ -14,20 +14,21 @@ class FCMNIST(nn.Module):
     @cpldcpu 2024-March-24
 
     """
-    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
+    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS', quantscale=0.25):
         super(FCMNIST, self).__init__()
 
         self.network_width1 = network_width1
         self.network_width2 = network_width2
         self.network_width3 = network_width3
+        self.quantscale = quantscale
 
-        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
-        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale, quantscale=quantscale)
+        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale )
         if network_width3>0:
-            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
-            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale)
+            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale)
         else:
-            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale)
             
         # self.dropout = nn.Dropout(0.10)
 
@@ -64,6 +65,10 @@ class BitLinear(nn.Linear):
     - PerTensor      : The weight scaling is calculated per Tensor
     - PerOutput      : The weight scaling is calculated per Output
 
+    quantcale
+    - scalar         : The scale factor for the weight quantization, the default of 0.25 
+                       biases the stddev of the weights toward 25% of the maximum scale
+
     Implementation based on:
     https://github.com/microsoft/unilm/blob/master/bitnet/The-Era-of-1-bit-LLMs__Training_Tips_Code_FAQ.pdf
     
@@ -71,11 +76,12 @@ class BitLinear(nn.Linear):
 
     @cpldcpu 2024-March-24
     """
-    def __init__(self, in_features, out_features, bias=False, QuantType='Binary', WScale='PerTensor', NormType='RMS'):
+    def __init__(self, in_features, out_features, bias=False, QuantType='Binary', WScale='PerTensor', NormType='RMS', quantscale=0.25):
         super(BitLinear, self).__init__(in_features, out_features, bias=False)
         self.QuantType = QuantType
         self.NormType = NormType
         self.WScale = WScale
+        self.quantscale = quantscale
 
         # flat init - does not help so keep default
         # fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
@@ -132,12 +138,6 @@ class BitLinear(nn.Linear):
         if self.QuantType == 'Ternary': # 1.58bits
             scale = 1.0 / mag
             u = (w * scale).round().clamp_(-1, 1) / scale
-        elif self.QuantType == 'Ternary06': # 1 bit
-            scale = 0.6 / mag
-            u = (w * scale).round().clamp_(-1, 1) / scale
-        elif self.QuantType == 'Ternary4': # 1 bit
-            scale = 4 / mag
-            u = (w * scale).round().clamp_(-1, 1) / scale
         elif self.QuantType == 'Binary': # 1 bit
             scale = mag
             e = w.mean()
@@ -146,27 +146,24 @@ class BitLinear(nn.Linear):
             scale = mag
             # e = w.mean()
             u = w.sign() * scale
-        elif self.QuantType == 'BinarySymHS': # 1 bit
-            scale = mag
-            u = w.sign() * scale * 0.5
-        elif self.QuantType == 'BinarySymDS': # 1 bit
-            scale = mag
-            u = w.sign() * scale * 2.0
         elif self.QuantType == '2bitsym':
             scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
             u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
+        elif self.QuantType == '4bit': # 4 bit in one-complement encoding for inference with multiplication
+            scale = self.quantscale * 8.0 / mag # 2.0 for tensor, 6.5 for output
+            u = ((w * scale).round().clamp_(-8, 7)) / scale        
         elif self.QuantType == '4bitsym':
-            scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
+            scale = self.quantscale * 8.0 / mag # 2.0 for tensor, 6.5 for output
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) / scale        
-        elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 127
-            scale = 16.0 / mag
+        elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 128
+            scale = 128.0 * self.quantscale / mag
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
             u = w.sign()*(e.exp2()) / scale            
         elif self.QuantType == '5bitsym':
-            scale = 4.0 / mag # 4.0 for tensor, 13 for output
+            scale = 16.0 * self.quantscale / mag # 4.0 for tensor, 13 for output
             u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5) / scale        
         elif self.QuantType == '8bit': # -128 to 127
-            scale = 32.0 / mag
+            scale = 128.0 * self.quantscale / mag
             u = (w * scale).round().clamp_(-128, 127) / scale   
         else:
             raise AssertionError(f"Invalid QuantType: {self.QuantType}. Expected one of: 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit'")
@@ -197,13 +194,15 @@ class QuantizedModel:
     This class represents a quantized model. It provides functionality to quantize a given model.
     """   
      
-    def __init__(self, model = None, force_quantization = None):
+    def __init__(self, model = None, force_quantization = None, quantscale=0.25):
         self.quantized_model=None
         self.total_bits=0
         self.force_quantization = force_quantization
+        self.quantscale = quantscale
 
         if model is not None:
             self.quantized_model, _ = self.quantize(model)
+            self.quantscale = model.quantscale
 
     def totalbits(self):
         """
@@ -263,21 +262,25 @@ class QuantizedModel:
                     scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
                     u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
                     bpw = 2
+                elif QuantType == '4bit': # 4 bit in one-complement encoding for inference with multiplication
+                    scale = 8.0 * self.quantscale / mag # 2.0 for tensor, 6.5 for output
+                    u = ((w * scale).round().clamp_(-8, 7)) 
+                    bpw = 4
                 elif QuantType == '4bitsym':
-                    scale = 2.0 / mag # 2.0 for tensor, 6.5 for output
+                    scale = 8.0 * self.quantscale / mag # 2.0 for tensor, 6.5 for output
                     u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5) 
                     bpw = 4
                 elif QuantType ==  'FP130': 
-                    scale = 16.0 / mag 
+                    scale = 128.0 * self.quantscale / mag 
                     e = ((w * scale ).abs()).log2().floor().clamp_(0, 7)
                     u = w.sign()*(e.exp2() )    
                     bpw = 4                       
                 elif QuantType == '5bitsym':
-                    scale = 4.0 / mag # 4.0 for tensor, 14 for output
+                    scale = 16.0 * self.quantscale / mag # 4.0 for tensor, 14 for output
                     u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5) 
                     bpw = 5
                 elif QuantType == '8bit':
-                    scale = 32.0 / mag
+                    scale = 128.0 * self.quantscale / mag
                     u = (w * scale).round().clamp_(-128, 127) 
                     bpw = 8
                 elif QuantType == 'None':

@@ -3,6 +3,7 @@ data/
 runs/
 runs_opt/
 backup/
+batchtest/
 *.obj
 *.dll
 *.exp
@@ -16,6 +17,8 @@ backup/
 *.lst
 *.bkp
 *.pdf
+*.log
+*.elog
 # python cache
 __pycache__/
 venv/

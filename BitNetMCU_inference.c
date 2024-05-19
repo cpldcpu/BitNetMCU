@@ -111,6 +111,8 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 2;
                 }
             }
+        // Muliplier-less inference for RB32EC
+#if defined(__riscv) && !defined(__riscv_mul)          
         } else if (bits_per_weight == 4 ) { 
             for (uint32_t k = 0; k < n_input; k+=8) {
                 uint32_t weightChunk = *weightidx++;
@@ -123,6 +125,30 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                         if (weightChunk & 0x20000000) sum += tmpsum<<2; // sign*in*4
                         if (weightChunk & 0x40000000) sum += tmpsum<<3; // sign*in*8
                     }
+                    weightChunk <<= 4;
+                }
+            }
+#else
+        } else if (bits_per_weight == 4 ) { 
+            for (uint32_t k = 0; k < n_input; k+=8) {
+                uint32_t weightChunk = *weightidx++;
+                for (uint32_t j = 0; j < 8; j++) {
+                    int32_t in=*activations_idx++;
+                    if (in != 0) { // Skip zero activations to speed up inference in layers after first layer
+                        int32_t tmpsum = (weightChunk & 0x80000000) ? -in : in; // one complements sign (bit set equals negative)
+                        sum += tmpsum * ((weightChunk>>(32-4))&7);                                  // sign*in*1
+                    }
+                    weightChunk <<= 4;
+                }
+            }
+#endif
+        } else if (bits_per_weight == 8 + 4 ) {   // 4 bit twos-complement
+            for (uint32_t k = 0; k < n_input; k+=8) {
+                int32_t weightChunk = *weightidx++;
+                for (uint32_t j = 0; j < 8; j++) {
+                    int32_t in=*activations_idx++;
+                    int32_t weight = (weightChunk) >> (32-4); // extend sign, cut off lower bits
+                    sum += in*weight;                                  
                     weightChunk <<= 4;
                 }
             }

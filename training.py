@@ -189,7 +189,8 @@ if __name__ == '__main__':
         network_width3=hyperparameters["network_width3"], 
         QuantType=hyperparameters["QuantType"], 
         NormType=hyperparameters["NormType"],
-        WScale=hyperparameters["WScale"]
+        WScale=hyperparameters["WScale"],
+        quantscale=hyperparameters["quantscale"]
     ).to(device)
 
     print('training...')

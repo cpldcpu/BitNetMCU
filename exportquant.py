@@ -8,6 +8,7 @@ import math
 import matplotlib.pyplot as plt
 import argparse
 import yaml
+import seaborn as sns
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
@@ -80,6 +81,9 @@ def export_to_hfile(quantized_model, filename, runname):
             elif quantization_type == '4bitsym': 
                 encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                 QuantID = 4
+            elif quantization_type == '4bit': 
+                encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
+                QuantID =  8 + 4
             elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
                 encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
                 QuantID = 16 + 4
@@ -213,12 +217,14 @@ def plot_weight_histograms(quantized_model):
 
     for layer_index, layer in enumerate(quantized_model.quantized_model):
         layer_weights = np.array(layer['quantized_weights'])
+        bpw = layer['bpw']
 
         flattened_weights = layer_weights.flatten()
 
         ax = fig.add_subplot(len(quantized_model.quantized_model), 1, layer_index + 1)
 
-        ax.hist(flattened_weights, bins='auto')
+        # ax.hist(flattened_weights, width=1, bins='auto')
+        sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
         ax.set_title(f'Layer {layer_index+1} Weight Distribution')
 
     plt.tight_layout()  
@@ -266,7 +272,8 @@ if __name__ == '__main__':
         network_width3=hyperparameters["network_width3"], 
         QuantType=hyperparameters["QuantType"], 
         NormType=hyperparameters["NormType"],
-        WScale=hyperparameters["WScale"]
+        WScale=hyperparameters["WScale"],
+        quantscale=hyperparameters["quantscale"]
     ).to(device)
 
     print('Loading model...')    
@@ -292,7 +299,7 @@ if __name__ == '__main__':
 
     print('Quantizing model...')
     # Quantize the model
-    quantized_model = QuantizedModel(model)
+    quantized_model = QuantizedModel(model, quantscale=hyperparameters["quantscale"])
 
     # Print statistics
     print_stats(quantized_model)
