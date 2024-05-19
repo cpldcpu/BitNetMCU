@@ -52,4 +52,5 @@ The data pipeline is split into several Python scripts for flexibility:
 - 24th April 2024 - First release with Binary, Ternary, 2 bit, 4 bit and 8 bit quantization. 
 - 2nd May 2024 - [tagged version 0.1a](https://github.com/cpldcpu/BitNetMCU/tree/0.1a)
 - 8th May 2024 - Added FP1.3.0 Quantization to allow fully multiplication-free inference with 98.9% accuracy.
-- 11th May 2024 - Fixed for Linux. Thanks to @donn
+- 11th May 2024 - Fixes for Linux. Thanks to @donn
+- 19th May 2024 - Add support for non-symmetric 4bit quantization scheme that allows for easier inference on MCUs with multiplier. The inference code will now use code optimized for multiplierless MCUs only on RV32 architectures without multiplier.
