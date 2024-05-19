@@ -111,7 +111,7 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 2;
                 }
             }
-        // Muliplier-less inference for RB32EC
+        // Muliplier-less inference for RV32EC
 #if defined(__riscv) && !defined(__riscv_mul)          
         } else if (bits_per_weight == 4 ) { 
             for (uint32_t k = 0; k < n_input; k+=8) {
