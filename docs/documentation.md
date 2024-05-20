@@ -648,19 +648,19 @@ I introduced a new hyperparameter that was previously hardcoded: ```quantscale``
 The plot below shows how the parameter influences the distribution of the first layer weights for the ```4bitsym``` encoding. 
 
 <div align="center">
-    <img src="4bit_histograms.png" width="80%">
+    <img src="4bit_histograms.png" width="60%">
 </div>
 
 We can see that the weights follow roughly a normal distribution with some extreme outliers. Changing quantscale to a higher value with make the distribution wider and increase the fraction of outliers at the maxima. QAT makes sure that the errors introducing from clipping the outliers are distributed to other weights.
 
 <div align="center">
-    <img src="quantscale_scan.png" width="80%">
+    <img src="quantscale_scan.png" width="70%">
 </div>
 
 I performed a scan of the parameter for the ```4bitsym``` and ```4bit``` encoding. We see that too high (0.5) and too low (0.125) degrade the weight distribution, leading to an increase of loss and worse test and train accuracy. Within the range of 0.2 to 0.4, the performance seems to be relatively stable. However, there is still a strong random variation of accuracy, caused by different initializations of the weights. This is also owed to the marginal capacity of the model which was minimized as much as possible. 
 
 <div align="center">
-    <img src="quantscale_entropy.png" width="80%">
+    <img src="quantscale_entropy.png" width="70%">
 </div>
 
 There is a rather interesting relationship when looking at standard deviation and [information entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) accross the layers. As expected, ```quantscale``` biases the standard deviation in a roughly proportional way. However, we can also see that the entropy increases for higher values. For low settings, this is because most weights are around zero and are truncated. Increasing the scale parameter also increases entropy. However, the accuracy of the model does not benefit, which means that only noise is added and no useful information. 
