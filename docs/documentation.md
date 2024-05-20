@@ -1,6 +1,7 @@
 # BitNetMCU
 
 **Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
+- [BitNetMCU](#bitnetmcu)
 - [Introduction and Motivation](#introduction-and-motivation)
   - [Background](#background)
 - [Implementation of training code](#implementation-of-training-code)
@@ -20,7 +21,13 @@
   - [Verification of the Ansi-C Inference Engine vs. Python](#verification-of-the-ansi-c-inference-engine-vs-python)
   - [Implementation on the CH32V003](#implementation-on-the-ch32v003)
 - [Summary and Conclusions](#summary-and-conclusions)
+- [Updates](#updates)
+  - [May 20, 2024: Additional quantization schemes](#may-20-2024-additional-quantization-schemes)
+    - [FP1.3.0 Quantization](#fp130-quantization)
+    - [4-bit ones complement quantization](#4-bit-ones-complement-quantization)
+  - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
 - [References](#references)
+
 
 
 # Introduction and Motivation
@@ -537,35 +544,128 @@ This achievement was made possible by employing Quantization Aware Training (QAT
 By simplifying the model architecture and using a full-custom implementation, I bypassed the usual complexities and memory overhead associated with Edge-ML inference engines.
 
 While this project focused on MNIST inference as a test case, I plan to apply this approach to other applications in the future.
+# Updates
+## May 20, 2024: Additional quantization schemes
 
-# Addendum: Additional quantization schemes
+This section outlines additional quantization schemes that improve inference speed to microcontrollers without and with multiplier. WCH has recently announced new members of the CH32V003 family that come with a slightly extended instruction set architecture, RV32EmC or officialle RV32EC-Zmmul, which also support multiplication. It is likely that the CH32V003 will remain the only multiplierless RISC-V MCU in the industry, hence supporting multiplications is a good idea.
 
+### FP1.3.0 Quantization
 
-## FP1.3.0 Quantization
+FP1.3.0 or FP130 is a quantization scheme based on 4-bit floating point numbers with 1-bit sign, 3-bit exponent and 0-bit mantissa. Weights are encoded as follows: $w = \text{sign} \times 2^{\text{exponent}}$. This will provide us with weigths as exponents of two without zero: ```-128, -64 ... -2, -1, 1, 2, ... 64, 128```
+
+The implementation of the inference code in C is extremely effective as only shift operations are required:
+
+```c
+    for (uint32_t k = 0; k < n_input; k+=8) {
+        uint32_t weightChunk = *weightidx++;
+        for (uint32_t j = 0; j < 8; j++) {
+            int32_t in=*activations_idx++;
+            int32_t tmpsum;
+            
+            tmpsum = (weightChunk & 0x80000000) ? -in : in;  // sign 
+            sum += tmpsum << ((weightChunk >> 28) & 7);      // sign*in*2^log                       
+            weightChunk <<= 4;
+        }
+```
+
+Accordingly, the code compiled to only a few instructions per weight, even on RV32EC.
+
+```asm	
+loop:
+	01db08b3          	add	    a7,s6,t4
+
+	00088883          	lb	    a7,0(a7)
+	000f5463          	bgez	t5,20000168 <positive>
+	411008b3          	neg	    a7,a7
+positive:
+
+	01cf5a93          	srli	s5,t5,0x1c
+	007afa93          	andi	s5,s5,7
+	015898b3          	sll	    a7,a7,s5
+	9846               	add	    a6,a6,a7
+
+	0e85               	addi	t4,t4,1
+	0f12               	slli	t5,t5,0x4
+
+	fdfe9fe3          	bne	    t4,t6,20000158 <loop>
+```
+
+Amazingly, Quantization Aware Training is able to adjust the weights in a way where this encoding can be used efficiently. A test accuracy of 98.66% was achieved with the same model size and training settings, which is only slightly lower than for ```4bitsym``` encoding. The inference time reduces to 10.17ms from 13.66ms due to the simpler shift operation.
+
+This is quite remarkable as using shifts instead of multiplications also would reduce complexity (circuit size) on dedicated inference hardware significantly. There seems to be some research on similar quantization schemes[^8], but no broad adoption yet.
+
+The first layer weights are shown below. Due to the increased contrast enforced by the exponential encoding, we can see stronger differences between patterns.
 
 <div align="center">
     <img src="first_layer_weights_fp130.png" width="60%">
 </div>
 
+The entropy is comparable to other 4 bit encodings, suggesting similar effective use of the coding space. We can, however, see that the lower layers do not use all of the available codes, which could be optimized further but different normalization schemes.
+
 <div align="center">
     <img src="fp130_export.png" width="80%">
 </div>
 
-TODO
+
+### 4-bit ones complement quantization
+
+The current implementation of 4 bit quantization ```4bitsym``` uses a symmetric encoding without zero. This is easy to implement on multiplierless MCUs, but becomes unnecessarily complex when a multiplier is available. Therefore I introduced ```4bit``` encoding, which encodes a 4 bit signed value is a one-complement number including zero: ```-8, -7 ... -2, -1, 0, 1, 2, ... 6, 7```.
+
+This allows for a more efficient implementation of the inference code, given that the multiplication instruction is available:
+
+```c
+    for (uint32_t k = 0; k < n_input; k+=8) {
+        int32_t weightChunk = *weightidx++;
+        for (uint32_t j = 0; j < 8; j++) {
+            int32_t in=*activations_idx++;
+                            // extend sign, remove lower bits
+            int32_t weight = (weightChunk) >> (32-4); 
+            sum += in*weight;                                  
+            weightChunk <<= 4;
+        }
+```
+
+Compiles to the following, much shorter, assembly code: 
 
 ```
-     1ee:	00170483          	lb	    s1,1(a4)
-     1f2:	00035463          	bgez	t1,1fa <processfclayer+0x4a>
-     1f6:	409004b3          	neg	    s1,s1
+loop:
+    	01ca8f33          	add	    t5,s5,t3
+    	000f0f03          	lb	    t5,0(t5)
 
-     1fa:	01c35313          	srli	t1,t1,0x1c
-     1fe:	00737313          	andi	t1,t1,7
-     202:	006494b3          	sll	    s1,s1,t1
-     
-     206:	00879313          	slli	t1,a5,0x8
+    	41cedb13          	srai	s6,t4,0x1c
+    	036f0f33          	mul	    t5,t5,s6
+    	987a                add	    a6,a6,t5
 
-     20a:	9626              	add	    a2,a2,s1
+    	0e05                addi	t3,t3,1
+    	0e92                slli	t4,t4,0x4
+
+    	fffe15e3          	bne	    t3,t6,2000011e <loop>
 ```
+## May 20, 2024: Quantization scaling
+
+I introduced a new hyperparameter that was previously hardcoded: ```quantscale```. This parameters influences the scaling of the weights. It will determine the value of the standard-deviation of the weights per tensor relative to the maximum value of the quantization scheme. Previously, the parameter was set to a default of 0.25, which corresponds to a standard deviation of approximately 2 for the ```4bitsym``` encoding.
+
+The plot below shows how the parameter influences the distribution of the first layer weights for the ```4bitsym``` encoding. 
+
+<div align="center">
+    <img src="4bit_histograms.png" width="80%">
+</div>
+
+We can see that the weights follow roughly a normal distribution with some extreme outliers. Changing quantscale to a higher value with make the distribution wider and increase the fraction of outliers at the maxima. QAT makes sure that the errors introducing from clipping the outliers are distributed to other weights.
+
+<div align="center">
+    <img src="quantscale_scan.png" width="80%">
+</div>
+
+I performed a scan of the parameter for the ```4bitsym``` and ```4bit``` encoding. We see that too high (0.5) and too low (0.125) degrade the weight distribution, leading to an increase of loss and worse test and train accuracy. Within the range of 0.2 to 0.4, the performance seems to be relatively stable. However, there is still a strong random variation of accuracy, caused by different initializations of the weights. This is also owed to the marginal capacity of the model which was minimized as much as possible. 
+
+<div align="center">
+    <img src="quantscale_entropy.png" width="80%">
+</div>
+
+There is a rather interesting relationship when looking at standard deviation and [information entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) accross the layers. As expected, ```quantscale``` biases the standard deviation in a roughly proportional way. However, we can also see that the entropy increases for higher values. For low settings, this is because most weights are around zero and are truncated. Increasing the scale parameter also increases entropy. However, the accuracy of the model does not benefit, which means that only noise is added and no useful information. 
+
+Already for an entropy of around 3 bits, it is possible to roughly maximize accuracy. This suggests that the weights can be compressed further to less than 80% of their original size, for example with an additional [entropy coding step](https://en.wikipedia.org/wiki/Entropy_coding), without loss of accuracy. Its an interesting question, whether this can also be achieved by different weight encoding.
 
 # References
 
@@ -584,3 +684,5 @@ References and further reading:
 [^6]: B. Zhang et al.  *Root Mean Square Layer Normalization* [arXiv:1910.07467](https://arxiv.org/abs/1910.07467)
 
 [^7] M. Courbariaux et al. *BinaryConnect: Training Deep Neural Networks with binary weights during propagations* [arXiv:1511.00363](https://arxiv.org/abs/1511.00363)
+
+[^8] M. Elhoushi et al. *DeepShift: Towards Multiplication-Less Neural Networks*  [arXiv:1905.13298](https://arxiv.org/abs/1905.13298)
