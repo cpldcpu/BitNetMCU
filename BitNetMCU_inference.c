@@ -141,7 +141,6 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 4;
                 }
             }
-#endif
         } else if (bits_per_weight == 8 + 4 ) {   // 4 bit twos-complement
             for (uint32_t k = 0; k < n_input; k+=8) {
                 int32_t weightChunk = *weightidx++;
@@ -152,6 +151,7 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 4;
                 }
             }
+#endif
         }  else if (bits_per_weight == 16 + 4 ) {  // 4 bit shift
             for (uint32_t k = 0; k < n_input; k+=8) {
                 uint32_t weightChunk = *weightidx++;
