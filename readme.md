@@ -54,3 +54,4 @@ The data pipeline is split into several Python scripts for flexibility:
 - 8th May 2024 - Added FP1.3.0 Quantization to allow fully multiplication-free inference with 98.9% accuracy.
 - 11th May 2024 - Fixes for Linux. Thanks to @donn
 - 19th May 2024 - Add support for non-symmetric 4bit quantization scheme that allows for easier inference on MCUs with multiplier. The inference code will now use code optimized for multiplierless MCUs only on RV32 architectures without multiplier.
+- 20th May 2024 - Added ```quantscale``` as a hyperparameter to influence weight scaling. [Updated documentation on new quantization schemes](https://github.com/cpldcpu/BitNetMCU/blob/main/docs/documentation.md#may-20-2024-additional-quantization-schemes).
