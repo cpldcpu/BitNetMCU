@@ -4,6 +4,7 @@ runs/
 runs_opt/
 backup/
 docs/
+batchtest/
 *.obj
 *.dll
 *.exp
