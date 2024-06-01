@@ -22,13 +22,13 @@ class FCMNIST(nn.Module):
         self.network_width3 = network_width3
         self.quantscale = quantscale
 
-        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale, quantscale=quantscale)
-        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale )
+        self.fc1 = BitLinear(1* 1 *16 *16, network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale, quantscale=quantscale, prunable=True)
+        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale, prunable=True )
         if network_width3>0:
-            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale)
-            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale)
+            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale, prunable=False)
+            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale, prunable=False)
         else:
-            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale)
+            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale , quantscale=quantscale, prunable=False)
             
         # self.dropout = nn.Dropout(0.10)
 
@@ -76,17 +76,20 @@ class BitLinear(nn.Linear):
 
     @cpldcpu 2024-March-24
     """
-    def __init__(self, in_features, out_features, bias=False, QuantType='Binary', WScale='PerTensor', NormType='RMS', quantscale=0.25):
+    def __init__(self, in_features, out_features, bias=False, QuantType='Binary', WScale='PerTensor', NormType='RMS', quantscale=0.25, prunable=False):
         super(BitLinear, self).__init__(in_features, out_features, bias=False)
         self.QuantType = QuantType
         self.NormType = NormType
         self.WScale = WScale
         self.quantscale = quantscale
+        self.prunable = prunable
 
         # flat init - does not help so keep default
         # fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
         # print(fan_in)
         # init.uniform_(self.weight, -np.sqrt(2/fan_in), np.sqrt(2/fan_in))
+
+        self.mask = nn.Parameter(torch.ones_like(self.weight), requires_grad=False)
 
     def forward(self, x):
         """
@@ -95,7 +98,7 @@ class BitLinear(nn.Linear):
         Returns:
         y: an output tensor with shape [n, k]
         """
-        w = self.weight # a weight tensor with shape [d, k]
+        w = self.weight * self.mask # a weight tensor with shape [d, k]
         x_norm = self.Normalize(x)
 
         if self.QuantType == 'None':
@@ -104,9 +107,24 @@ class BitLinear(nn.Linear):
             # A trick for implementing Straight-Through-Estimator (STE) using detach()
             x_quant = x_norm + (self.activation_quant(x_norm) - x_norm).detach()
             w_quant = w + (self.weight_quant(w) - w).detach()
-            y = F.linear(x_quant, w_quant)
+            y = F.linear(x_quant, w_quant )
         return y
     
+    def prune(self, percent=25):
+        """
+        Update the mask and weights to prune the weights with the lowest absolute values.
+        Args:
+        percent: the percentage of weights to prune
+        """
+        abs_weights = self.weight.abs()
+        flat_abs_weights = abs_weights.view(-1)
+        threshold = torch.kthvalue(flat_abs_weights, int(flat_abs_weights.shape[0] * percent / 100))[0]
+        print(f'Threshold:{threshold}')
+        mask = abs_weights > threshold
+        # print(mask.float())
+        self.weight.data.mul_(mask.float())
+        self.mask = torch.nn.Parameter(mask.float(), requires_grad=False)
+
     def activation_quant(self, x):
         """ Per-token quantization to 8 bits. No grouping is needed for quantization.
         Args:
@@ -226,7 +244,10 @@ class QuantizedModel:
         totalbits = 0
         for i, layer in enumerate(model.modules()):
             if isinstance(layer, BitLinear):
-                w         = layer.weight.data
+                if layer.prunable:
+                    w         = layer.weight.data * layer.mask
+                else:
+                    w         = layer.weight.data
                 QuantType = layer.QuantType
                 
                 if self.force_quantization != None:

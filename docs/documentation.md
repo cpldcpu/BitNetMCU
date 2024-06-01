@@ -667,6 +667,25 @@ There is a rather interesting relationship when looking at standard deviation an
 
 Already for an entropy of around 3 bits, it is possible to roughly maximize accuracy. This suggests that the weights can be compressed further to less than 80% of their original size, for example with an additional [entropy coding step](https://en.wikipedia.org/wiki/Entropy_coding), without loss of accuracy. Its an interesting question, whether this can also be achieved by different weight encoding.
 
+## June 1, 2024: Pruning
+
+Pruning the first layer by 50% is inconsequential and allows for compression of the first layer weights. Open: How to best store sparse weights? Most simple implementation will only allows for 25% reduced of data size. (two 4 bit weights are reduced to one 4 bit weight + 2 bits of mask) The more layers are pruned, this higher the loss in accuracy.
+
+<div align="center">
+    <img src="pruning.png" width="70%">
+</div>
+
+(first run prunes only layer 1, second layers 1,2,3,4. Green run is for reference)
+
+<div align="center">
+    <img src="Pruned_layers1_2.png" width="70%">
+</div>
+
+<div align="center">
+    <img src="pruned_first_layer_weights.png" width="70%">
+</div>
+
+
 # References
 
 References and further reading:

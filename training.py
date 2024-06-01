@@ -22,6 +22,12 @@ def create_run_name(hyperparameters):
     hyperparameters["runname"] = runname
     return runname
 
+def prune_model(model, percentage):
+    for layer in model.children():
+        if layer.prunable==True:
+            print(f'Pruning layer {layer}')
+            layer.prune(percentage)
+
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
@@ -70,6 +76,10 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         correct = 0
         train_loss=[]
         start_time = time.time()
+
+        if epoch == 20:
+            print('Pruning')
+            prune_model(model, 50)
 
         if hyperparameters["augmentation"]:
             for i, (images, labels) in enumerate(train_loader):
