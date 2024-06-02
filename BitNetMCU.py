@@ -128,6 +128,84 @@ class CNNMNIST(nn.Module):
         x = self.fcl(x)
         return x
 
+
+class PEMNIST(nn.Module):
+    """
+    CNN+FC Neural Network for MNIST dataset.
+    16x16 input image, 3 hidden layers with a configurable width.
+
+    @cpldcpu 2024-April-19
+
+    """
+    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
+        super(PEMNIST, self).__init__()
+
+        self.network_width1 = network_width1
+        self.network_width2 = network_width2
+        self.network_width3 = network_width3
+
+        self.fc1 = BitLinear(64 , network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
+
+        if network_width3>0:
+            self.fc3 = BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale)
+            self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        else:
+            self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+
+        # self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=2, padding=2,  groups=1,QuantType='8bit',NormType=NormType, WScale=WScale)
+        # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=2, padding=2, groups=16,QuantType='8bit',NormType=NormType, WScale=WScale)
+
+        # self.conv1 = BitConv2d(1, 16, kernel_size=5, stride=1, padding=2,  groups=1)
+        # self.conv2 = BitConv2d(16, 16, kernel_size=5, stride=1, padding=2, groups=1)
+
+
+        # self.conv1 = BitConv2d(1, 64, kernel_size=5, stride=1, padding=2,  groups=1,QuantType='8bit',NormType='None', WScale=WScale)
+        # self.conv2 = BitConv2d(64, 8, kernel_size=5, stride=1, padding=2, groups=8,QuantType='8bit',NormType='None', WScale=WScale)
+
+        # self.conv1 = BitConv2d(1, 64, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
+        # self.conv2 = BitConv2d(64, 64, kernel_size=14, stride=1, padding=0, groups=64,QuantType='Mask',NormType='None', WScale=WScale)
+
+        # 99.3
+        # self.conv1 = BitConv2d(1, 64, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
+        # self.conv1b = BitConv2d(64, 64, kernel_size=3, stride=1, padding=0,  groups=64,QuantType='4bitsym',NormType='None', WScale=WScale)
+        # self.conv2 = BitConv2d(64, 64, kernel_size=12, stride=1, padding=0, groups=64,QuantType='2bit',NormType='None', WScale=WScale)
+
+        self.conv1 = BitConv2d(1, 64, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
+        self.conv1b = BitConv2d(64, 64, kernel_size=3, stride=1, padding=0,  groups=64,QuantType='4bitsym',NormType='None', WScale=WScale)
+        self.conv2 = BitConv2d(64, 64, kernel_size=5, stride=1, padding=0, groups=64,QuantType='4bitsym',NormType='None', WScale=WScale)
+
+        # self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1, bias=False)
+        # self.conv2 = nn.Conv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8, bias=False)
+
+        # self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2, groups=32)
+
+
+        self.dropout = nn.Dropout(0.05)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.conv1b(x))
+        # x = self.conv1(x)
+        # x = F.max_pool2d(x, kernel_size=4, stride=4)
+        x = F.relu(self.conv2(x))        
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        # x = F.relu(self.conv3(x))        
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+
+        x = x.view(x.size(0), -1)
+        # x = self.dropout(x)
+        x = F.relu(self.fc1(x))
+        # x = self.dropout(x)
+        x = F.relu(self.fc2(x))
+        if self.network_width3>0:
+            x = F.relu(self.fc3(x))
+
+        x = self.fcl(x)
+        return x
+
+
 class BitLinear(nn.Linear):
     """
     Linear convolution layer with quantization aware training and normalization.
@@ -223,6 +301,10 @@ class BitLinear(nn.Linear):
             scale = mag
             e = w.mean()
             u = (w - e).sign() * scale
+        elif self.QuantType == 'Mask': # 1 bit
+            scale = mag
+            e = w.mean()
+            u = (w - e).gt(0).float() * scale
         elif self.QuantType == 'BinarySym': # 1 bit
             scale = mag
             # e = w.mean()
@@ -233,6 +315,9 @@ class BitLinear(nn.Linear):
         elif self.QuantType == 'BinarySymDS': # 1 bit
             scale = mag
             u = w.sign() * scale * 2.0
+        elif self.QuantType == '2bit':
+            scale = 0.5 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+            u = ((w * scale).round().clamp_(-2, 1) ) / scale
         elif self.QuantType == '2bitsym':
             scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
             u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
@@ -369,6 +454,11 @@ class BitConv2d(nn.Conv2d):
         elif self.QuantType == 'Ternary4': # 1 bit
             scale = 4 / mag
             u = (w * scale).round().clamp_(-1, 1) / scale
+        elif self.QuantType == 'Mask': # 1 bit
+            scale = mag
+            # e = w.mean()
+            # u = (w - e).gt(0).float() * scale
+            u = w.gt(0).float() 
         elif self.QuantType == 'Binary': # 1 bit
             scale = mag
             e = w.mean()
@@ -383,6 +473,9 @@ class BitConv2d(nn.Conv2d):
         elif self.QuantType == 'BinarySymDS': # 1 bit
             scale = mag
             u = w.sign() * scale * 2.0
+        elif self.QuantType == '2bit':
+            scale = 0.5 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
+            u = ((w * scale).round().clamp_(-2, 1) ) / scale
         elif self.QuantType == '2bitsym':
             scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
             u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale

@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from BitNetMCU import FCMNIST, CNNMNIST
+from BitNetMCU import FCMNIST, CNNMNIST, PEMNIST
 import time
 import random
 from torchsummary import summary
@@ -27,15 +27,15 @@ hyperparameters = {
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
     "step_size": 10,
-    "network_width1": 96, 
-    "network_width2": 48, 
+    "network_width1": 64, 
+    "network_width2": 64, 
     "network_width3": 0,
     "Augmentation": True,
     "runname": ''
 }
 
-retrain = True  # Train or load model
-runtag = 'cnn_conv2'
+retrain = False  # Train or load model
+runtag = 'mask5x5_norelu_conv2'
 #---------------------------------------------
 
 def create_run_name(hyperparameters):
@@ -189,7 +189,7 @@ if __name__ == '__main__':
         train_data = ConcatDataset([train_data, augmented_train_data])
 
     # Initialize the network and optimizer
-    model = CNNMNIST(
+    model = PEMNIST(
         network_width1=hyperparameters["network_width1"], 
         network_width2=hyperparameters["network_width2"], 
         network_width3=hyperparameters["network_width3"], 
@@ -205,5 +205,28 @@ if __name__ == '__main__':
     print('training...')
     train_model(model, device, hyperparameters, train_data, test_data)
 
+    import matplotlib.pyplot as plt
+
+    for name, param in model.named_parameters():
+        if name == 'conv2.weight':
+            # Quantize the weights
+            quantized_weights = param.data.gt(0).float()
+
+            # Print and plot statistics
+            print(f"Layer: {name}")
+            print(f"Quantized weight mean: {quantized_weights.mean()}")
+            print(f"Quantized weight std: {quantized_weights.std()}")
+            print(f"Quantized weight max: {quantized_weights.max()}")
+            print(f"Quantized weight min: {quantized_weights.min()}")
+
+
+            # Compute histogram
+            counts, bin_edges = np.histogram(quantized_weights.cpu().numpy().flatten(), bins=4)
+            
+            # Print histogram
+            for i in range(len(counts)):
+                print(f"Bin: {bin_edges[i]} - {bin_edges[i+1]}, Frequency: {counts[i]}")
+
+            break  # Stop iterating once we've found and processed conv2.weight
     print('saving model...')    
     torch.save(model.state_dict(), f'modeldata/{runname}.pth')
