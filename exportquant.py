@@ -3,7 +3,8 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import numpy as np
 from datetime import datetime
-from BitNetMCU import FCMNIST, QuantizedModel
+from BitNetMCU import QuantizedModel
+from models import FCMNIST
 import math
 import matplotlib.pyplot as plt
 import argparse

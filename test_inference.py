@@ -2,8 +2,8 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import numpy as np
-from datetime import datetime
-from BitNetMCU import FCMNIST, QuantizedModel
+from BitNetMCU import QuantizedModel
+from models import FCMNIST
 from ctypes import CDLL, c_uint32, c_int8, c_uint8, POINTER
 import argparse
 import yaml
@@ -142,7 +142,7 @@ if __name__ == '__main__':
         result_py = quantized_model.inference_quantized(input_data)
         predict_py = np.argmax(result_py, axis=1)
 
-        activations = quantized_model.get_activations(input_data)
+        # activations = quantized_model.get_activations(input_data)
 
         if (result_c == labels[0]):
             correct_c += 1
