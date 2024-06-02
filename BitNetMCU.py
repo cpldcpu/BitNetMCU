@@ -144,7 +144,7 @@ class PEMNIST(nn.Module):
         self.network_width2 = network_width2
         self.network_width3 = network_width3
 
-        self.fc1 = BitLinear(64 , network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        self.fc1 = BitLinear(96 , network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
         if network_width3>0:
@@ -171,9 +171,15 @@ class PEMNIST(nn.Module):
         # self.conv1b = BitConv2d(64, 64, kernel_size=3, stride=1, padding=0,  groups=64,QuantType='4bitsym',NormType='None', WScale=WScale)
         # self.conv2 = BitConv2d(64, 64, kernel_size=12, stride=1, padding=0, groups=64,QuantType='2bit',NormType='None', WScale=WScale)
 
-        self.conv1 = BitConv2d(1, 64, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
-        self.conv1b = BitConv2d(64, 64, kernel_size=3, stride=1, padding=0,  groups=64,QuantType='4bitsym',NormType='None', WScale=WScale)
-        self.conv2 = BitConv2d(64, 64, kernel_size=5, stride=1, padding=0, groups=64,QuantType='4bitsym',NormType='None', WScale=WScale)
+        # 99.28  dw with pooling
+        # self.conv1 = BitConv2d(1, 96, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
+        # self.conv1b = BitConv2d(96, 96, kernel_size=3, stride=1, padding=0,  groups=96,QuantType='4bitsym',NormType='None', WScale=WScale)
+        # self.conv2 = BitConv2d(96, 96, kernel_size=5, stride=1, padding=0, groups=96,QuantType='4bitsym',NormType='None', WScale=WScale)
+
+        # Sparse cnnn with 
+        self.conv1 = BitConv2d(1, 96*4, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
+        self.conv1b = BitConv2d(96*4, 96, kernel_size=1, stride=1, padding=0,  groups=96,QuantType='4bitsym',NormType='None', WScale=WScale)
+        self.conv2 = BitConv2d(96, 96, kernel_size=14, stride=1, padding=0, groups=96,QuantType='Mask',NormType='None', WScale=WScale)
 
         # self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2,  groups=1, bias=False)
         # self.conv2 = nn.Conv2d(64, 8, kernel_size=5, stride=2, padding=2, groups=8, bias=False)
@@ -185,7 +191,7 @@ class PEMNIST(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv1b(x))
         # x = self.conv1(x)
         # x = F.max_pool2d(x, kernel_size=4, stride=4)
@@ -205,6 +211,18 @@ class PEMNIST(nn.Module):
         x = self.fcl(x)
         return x
 
+    def prune(self, percentage):
+        """
+        Prune the lowest xx percent of positive weights in the conv2 layer to zero.
+
+        Args:
+        percentage (float): The percentage of weights to prune (0-100).
+        """
+        conv2_weights = self.conv2.weight.data
+        threshold = torch.quantile(conv2_weights[conv2_weights > 0], percentage / 100.0)
+        mask = (conv2_weights > 0) & (conv2_weights < threshold)
+        conv2_weights[mask] = -1
+        self.conv2.weight.data = conv2_weights
 
 class BitLinear(nn.Linear):
     """

@@ -27,8 +27,8 @@ hyperparameters = {
     "learning_rate": 1e-3,
     "lr_decay": 0.1, # these are not used with cosine scheduler
     "step_size": 10,
-    "network_width1": 64, 
-    "network_width2": 64, 
+    "network_width1": 96, 
+    "network_width2": 48, 
     "network_width3": 0,
     "Augmentation": True,
     "runname": ''
@@ -88,6 +88,9 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         correct = 0
         train_loss=[]
         start_time = time.time()
+
+        if epoch == 10:
+            model.prune(75)
 
         if hyperparameters["Augmentation"]:
             for i, (images, labels) in enumerate(train_loader):
