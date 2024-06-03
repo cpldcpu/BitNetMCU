@@ -112,7 +112,7 @@ class BitQuant:
 
 class BitLinear(nn.Linear, BitQuant):
     """
-    Linear convolution layer with quantization aware training and normalization.
+    Linear fully connected layer with quantization aware training and normalization.
     Configurable quantization and normalization types.
 
     Normalization Types:
@@ -171,6 +171,65 @@ class BitLinear(nn.Linear, BitQuant):
             raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm'")
         return z
 
+class BitConv2d(nn.Conv2d, BitQuant):
+    """
+    2D convolution layer with quantization aware training and normalization.
+    Configurable quantization and normalization types.
+
+    Normalization Types:
+    - RMS            : Root Mean Square
+    - None           : No normalization
+
+    @cpldcpu 2024-June-2
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, groups=1,  QuantType='4bitsym', WScale='PerTensor', NormType='RMS', quantscale=0.25):
+        nn.Conv2d.__init__(self,in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups, bias=False)
+        BitQuant.__init__(self, QuantType, WScale, quantscale)
+
+        self.NormType = NormType
+        self.groups = groups
+        self.stride = stride
+        self.padding = padding
+
+    def forward(self, x):
+        """
+        Args:
+        x: an input tensor with shape [n, d]
+        Returns:
+        y: an output tensor with shape [n, k]
+        """
+        w = self.weight # a weight tensor with shape [d, k]
+        x_norm = self.Normalize(x)
+
+        if self.QuantType == 'None':
+            y = F.conv2d(x_norm, w,  stride=self.stride, padding=self.padding, groups=self.groups )        
+        else:
+            x_int, x_scale = self.activation_quant(x_norm)
+            x_quant = x_norm + (x_int / x_scale - x_norm).detach()
+
+            w_int, w_scale, _ = self.weight_quant(w)
+            w_quant = w + (w_int / w_scale - w).detach()
+
+            y = F.conv2d(x_quant, w_quant, groups=self.groups, stride=self.stride, padding=self.padding, bias=None)
+        return y
+
+    def Normalize(self, x):
+            """ Normalization. Normalizes along the last dimension -> different normalization value for each activation vector.
+            Args:
+            x: an input tensor with shape [n, d]
+            Returns:
+            y: a normalized tensor with shape [n, d]
+            """
+            if self.NormType == 'RMS':
+                y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))            
+                z = x / y
+            elif self.NormType == 'None':
+                z = x
+            else:
+                raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'None'")
+            return z
+
 class QuantizedModel:
     """
     This class represents a quantized model. It provides functionality to quantize a given model.
@@ -218,6 +277,7 @@ class QuantizedModel:
                 quantized_weight = u.cpu().numpy()
 
                 layer_info = {
+                    'layer_type': 'BitLinear',
                     'layer_order': i,
                     'incoming_weights': quantized_weight.shape[1],
                     'outgoing_weights': quantized_weight.shape[0],
