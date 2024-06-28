@@ -1,0 +1,25 @@
+﻿Language: Cpp
+
+UseTab: Never
+IndentWidth: 4
+TabWidth: 4
+
+ColumnLimit: 88
+AlignAfterOpenBracket: DontAlign
+IndentCaseLabels: true
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+    BeforeElse: true
+    
+DerivePointerAlignment: false
+PointerAlignment: Middle
+
+SortIncludes: true
+IncludeBlocks: Regroup
+
+MaxEmptyLinesToKeep: 1
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+ReflowComments: true
+SortUsingDeclarations: true
