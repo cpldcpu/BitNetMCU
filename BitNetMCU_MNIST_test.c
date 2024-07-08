@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "BitNetMCU_model.h"
+#include "mcu/BitNetMCU_model_12k.h"
 #include "BitNetMCU_inference.c"
 #include "BitNetMCU_MNIST_test_data.h"
 

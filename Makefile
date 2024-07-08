@@ -3,7 +3,7 @@ HEADERS = BitNetMCU_model.h  BitNetMCU_inference.h
 DLL = Bitnet_inf.dll
 
 $(DLL): $(SOURCES) $(HEADERS)
-	cc -fPIC -shared -o $@ -D _DLL $<
+	gcc -fPIC -shared -o $@ -D _DLL $<
 
 .PHONY: clean
 clean:

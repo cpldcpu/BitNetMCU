@@ -12,7 +12,7 @@
 #define ARRAY_SIZE 256
 #define BUFFER_SIZE 800
 
-volatile int8_t received_integers[ARRAY_SIZE] = {0};
+int8_t received_integers[ARRAY_SIZE] = {0};
 volatile int array_index = 0;
 volatile int8_t input_received = 0; // Flag to indicate input received
 volatile char buffer[BUFFER_SIZE];  // Buffer to store received data
@@ -152,7 +152,7 @@ void BitMnistInference(const int8_t * input, const uint8_t sample) {
 
 int main() {
     SystemInit();
-    //	SysTick->CTLR = 5;  // Use HCLK as time base -> configured in funconfig.h
+    SysTick->CTLR = 5;  // Use HCLK as time base -> configured in funconfig.h
     setup_uart();
     setup_gpio();
     printf("MCU initialized\n");
