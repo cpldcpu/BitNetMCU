@@ -6,11 +6,12 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from models import FCMNIST
+from models import FCMNIST, CNNMNIST
 import time
 import random
 import argparse
 import yaml
+from torchsummary import summary
 
 #----------------------------------------------
 # BitNetMCU training
@@ -184,6 +185,7 @@ if __name__ == '__main__':
 
     # Initialize the network and optimizer
     model = FCMNIST(
+    # model = CNNMNIST(
         network_width1=hyperparameters["network_width1"], 
         network_width2=hyperparameters["network_width2"], 
         network_width3=hyperparameters["network_width3"], 
@@ -192,6 +194,8 @@ if __name__ == '__main__':
         WScale=hyperparameters["WScale"],
         quantscale=hyperparameters["quantscale"]
     ).to(device)
+
+    summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)
 
     print('training...')
     train_model(model, device, hyperparameters, train_data, test_data)
