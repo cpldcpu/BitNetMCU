@@ -35,6 +35,20 @@ class BitQuant:
         self.WScale = WScale
         self.quantscale = quantscale
 
+    def get_num_bits(self):
+        if self.QuantType in ['Binary', 'BinarySym']:
+            return 1
+        elif self.QuantType in ['2bitsym', 'Ternary']: 
+            return 2
+        elif self.QuantType in ['4bit', '4bitsym', 'FP130']:
+            return 4
+        elif self.QuantType == '5bitsym':
+            return 5
+        elif self.QuantType == '8bit':
+            return 8
+        else:
+            raise AssertionError(f"Invalid QuantType: {self.QuantType}")
+
     def activation_quant(self, x):
         """ Per-token quantization to 8 bits. No grouping is needed for quantization.
         Args:
@@ -56,59 +70,40 @@ class BitQuant:
         scale: scale factor for the quantization
         bpw:   bit per weight
         """
+
+        bpw = self.get_num_bits()
+
         if self.WScale=='PerOutput':
-            mag = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5)
-            # magmax = mag.max()
-            # scalequant = (127.0*mag/magmax).round().clamp_(1,127)
-            # mag = scalequant * magmax / 127.0
+            s = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5) / ( self.quantscale * (2.0**(bpw-1)) )
         elif self.WScale=='PerTensor':
-            mag = w.abs().mean().clamp_(min=1e-5)
+            s = w.abs().mean().clamp_(min=1e-5) / ( self.quantscale * (2.0**(bpw-1)) )
         else:
             raise AssertionError(f"Invalid WScale: {self.WScale}. Expected one of: 'PerTensor', 'PerOutput'")
 
         if self.QuantType == 'Ternary': # 1.58bits
-            scale = 1.0 / mag
-            u = (w * scale).round().clamp_(-1, 1) 
-            bpw = 1.6
+            u = (w / s).round().clamp_(-1, 1) 
         elif self.QuantType == 'Binary': # 1 bit
-            scale = 1.0 / mag
             e = w.mean()
             u = (w - e).sign() 
-            bpw = 1
         elif self.QuantType == 'BinarySym': # 1 bit
-            scale = 1.0 / mag
-            # e = w.mean()
             u = w.sign() 
-            bpw = 1
         elif self.QuantType == '2bitsym':
-            scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
-            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
-            bpw = 2
+            u = ((w / s - 0.5).round().clamp_(-2, 1) + 0.5) 
         elif self.QuantType == '4bit': # 4 bit in one-complement encoding for inference with multiplication
-            scale = self.quantscale * 8.0 / mag # 2.0 for tensor, 6.5 for output
-            u = ((w * scale).round().clamp_(-8, 7))    
-            bpw = 4
+            u = ((w / s).round().clamp_(-8, 7))    
         elif self.QuantType == '4bitsym':
-            scale = self.quantscale * 8.0 / mag # 2.0 for tensor, 6.5 for output
-            u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5)  
-            bpw = 4
+            u = ((w / s - 0.5).round().clamp_(-8, 7) + 0.5)  
         elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 128
-            scale = 128.0 * self.quantscale / mag
-            e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
+            e = ((w / s).abs()).log2().floor().clamp_(0, 7)
             u = w.sign()*(e.exp2())    
-            bpw = 4
         elif self.QuantType == '5bitsym':
-            scale = 16.0 * self.quantscale / mag # 4.0 for tensor, 13 for output
-            u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5)
-            bpw = 5
+            u = ((w / s - 0.5).round().clamp_(-16, 15) + 0.5)
         elif self.QuantType == '8bit': # -128 to 127
-            scale = 128.0 * self.quantscale / mag
-            u = (w * scale).round().clamp_(-128, 127) 
-            bpw = 8
+            u = (w / s).round().clamp_(-128, 127) 
         else:
             raise AssertionError(f"Invalid QuantType: {self.QuantType}. Expected one of: 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit'")
         
-        return u, scale, bpw
+        return u, 1/s, bpw
 
 class BitLinear(nn.Linear, BitQuant):
     """
@@ -149,6 +144,7 @@ class BitLinear(nn.Linear, BitQuant):
 
             w_int, w_scale, _ = self.weight_quant(w)
             w_quant = w + (w_int / w_scale - w).detach()
+
             y = F.linear(x_quant, w_quant)
         return y
     
