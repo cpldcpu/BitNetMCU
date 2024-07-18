@@ -22,32 +22,78 @@ class BitQuant:
     - PerTensor      : The weight scaling is calculated per Tensor
     - PerOutput      : The weight scaling is calculated per Output
 
-    quantcale
-    - scalar         : The scale factor for the weight quantization, the default of 0.25 
-                       biases the stddev of the weights toward 25% of the maximum scale
-
-    Implementation based on:
+    Implementation was initially based on:
     https://github.com/microsoft/unilm/blob/master/bitnet/The-Era-of-1-bit-LLMs__Training_Tips_Code_FAQ.pdf
 
     """
-    def __init__(self, QuantType='Binary', WScale='PerTensor', quantscale=0.25):
+    def __init__(self, QuantType='Binary', WScale='PerTensor'):
         self.QuantType = QuantType
         self.WScale = WScale
-        self.quantscale = quantscale
+        self.s = torch.nn.Parameter(torch.tensor(1.0))
+        self.s.requires_grad = False  # no gradient for clipping scalar
 
-    def get_num_bits(self):
         if self.QuantType in ['Binary', 'BinarySym']:
-            return 1
+            self.bpw = 1
         elif self.QuantType in ['2bitsym', 'Ternary']: 
-            return 2
+            self.bpw = 2
         elif self.QuantType in ['4bit', '4bitsym', 'FP130']:
-            return 4
+            self.bpw = 4
         elif self.QuantType == '5bitsym':
-            return 5
+            self.bpw = 5
         elif self.QuantType == '8bit':
-            return 8
+            self.bpw = 8
         else:
             raise AssertionError(f"Invalid QuantType: {self.QuantType}")
+
+        if not self.WScale in ['PerOutput', 'PerTensor']:
+            raise AssertionError(f"Invalid WScale: {self.WScale}. Expected one of: 'PerTensor', 'PerOutput'")
+    
+    # Octave optimum clipping algorithm (C. Sakr et al., 2022)
+    # see https://arxiv.org/abs/2206.06501
+    def octav(self, tensor, num_iterations=10, s=-1):
+        if s<0:
+            # s = torch.sum(torch.abs(tensor)) / torch.sum(tensor != 0)
+            s = tensor.abs().mean().clamp_(min=1e-5) * 0.25 # blind estimate as starting point
+        for _ in range(num_iterations):
+            indicator_le = (torch.abs(tensor) <= s).float()
+            indicator_gt = (torch.abs(tensor) > s).float()
+            numerator = torch.sum(torch.abs(tensor) * indicator_gt)
+            denominator = (4**-self.bpw / 3) * torch.sum(indicator_le) + torch.sum(indicator_gt)
+            s = numerator / denominator
+
+        return s
+
+    def update_clipping_scalar(self, w, algorithm='octav', quantscale=0.25):
+        """ 
+        Update the weight scale factor for the quantization.
+        Args:
+            w:          a weight tensor with shape [d, k]
+            algorithm:  clipping algorithm to use
+                'octav' : Octave optimum clipping algorithm
+                'prop'  : Proportional clipping algorithm
+        Returns:
+            s:          updated clipping scalar for the quantization
+        """
+    
+        s= self.s
+
+        if algorithm == 'octav':
+            if self.WScale=='PerOutput':
+                s = torch.stack([self.octav(row, 10) for row in w])
+            else:
+                s = self.octav(w, 10, s)             
+        elif algorithm == 'prop':
+            if self.WScale=='PerOutput':
+                s = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5) / quantscale 
+            else:
+                s = w.abs().mean().clamp_(min=1e-5) / quantscale 
+        else:
+            raise AssertionError(f"Invalid algorithm: {algorithm}. Expected one of: 'octav', 'prop'")
+
+        self.s = torch.nn.Parameter(s)
+        self.s.requires_grad = False  # no gradient for clipping scalar
+
+        return s
 
     def activation_quant(self, x):
         """ Per-token quantization to 8 bits. No grouping is needed for quantization.
@@ -71,39 +117,36 @@ class BitQuant:
         bpw:   bit per weight
         """
 
-        bpw = self.get_num_bits()
-
-        if self.WScale=='PerOutput':
-            s = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5) / ( self.quantscale * (2.0**(bpw-1)) )
-        elif self.WScale=='PerTensor':
-            s = w.abs().mean().clamp_(min=1e-5) / ( self.quantscale * (2.0**(bpw-1)) )
+        if self.QuantType == 'FP130':
+            scale = 32.0 / self.s
         else:
-            raise AssertionError(f"Invalid WScale: {self.WScale}. Expected one of: 'PerTensor', 'PerOutput'")
+            scale = (2.0**(self.bpw-1)) / self.s
 
         if self.QuantType == 'Ternary': # 1.58bits
-            u = (w / s).round().clamp_(-1, 1) 
+            u = (w * scale).round().clamp_(-1, 1) 
         elif self.QuantType == 'Binary': # 1 bit
             e = w.mean()
             u = (w - e).sign() 
         elif self.QuantType == 'BinarySym': # 1 bit
             u = w.sign() 
         elif self.QuantType == '2bitsym':
-            u = ((w / s - 0.5).round().clamp_(-2, 1) + 0.5) 
+            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
         elif self.QuantType == '4bit': # 4 bit in one-complement encoding for inference with multiplication
-            u = ((w / s).round().clamp_(-8, 7))    
+            # u = (w * scale).round().clamp_(-8, 7) # no convergence with this?!
+            u = ((w * scale - 0.01).round().clamp_(-8, 7) + 0.01)  
         elif self.QuantType == '4bitsym':
-            u = ((w / s - 0.5).round().clamp_(-8, 7) + 0.5)  
+            u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5)  
         elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 128
-            e = ((w / s).abs()).log2().floor().clamp_(0, 7)
+            e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
             u = w.sign()*(e.exp2())    
         elif self.QuantType == '5bitsym':
-            u = ((w / s - 0.5).round().clamp_(-16, 15) + 0.5)
+            u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5)
         elif self.QuantType == '8bit': # -128 to 127
-            u = (w / s).round().clamp_(-128, 127) 
+            u = (w * scale).round().clamp_(-128, 127) 
         else:
             raise AssertionError(f"Invalid QuantType: {self.QuantType}. Expected one of: 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit'")
         
-        return u, 1/s, bpw
+        return u, scale, self.bpw
 
 class BitLinear(nn.Linear, BitQuant):
     """
@@ -119,9 +162,9 @@ class BitLinear(nn.Linear, BitQuant):
 
     @cpldcpu 2024-March-24
     """
-    def __init__(self, in_features, out_features, bias=False, QuantType='Binary', WScale='PerTensor', NormType='RMS', quantscale=0.25):
+    def __init__(self, in_features, out_features, bias=False, QuantType='Binary', WScale='PerTensor', NormType='RMS'):
         nn.Linear.__init__(self, in_features, out_features, bias=False)
-        BitQuant.__init__(self, QuantType, WScale, quantscale)
+        BitQuant.__init__(self, QuantType, WScale)
 
         self.NormType = NormType
 
@@ -179,9 +222,9 @@ class BitConv2d(nn.Conv2d, BitQuant):
     @cpldcpu 2024-June-2
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, groups=1,  QuantType='4bitsym', WScale='PerTensor', NormType='RMS', quantscale=0.25):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, groups=1,  QuantType='4bitsym', WScale='PerTensor', NormType='RMS'):
         nn.Conv2d.__init__(self,in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups, bias=False)
-        BitQuant.__init__(self, QuantType, WScale, quantscale)
+        BitQuant.__init__(self, QuantType, WScale)
 
         self.NormType = NormType
         self.groups = groups
@@ -231,14 +274,12 @@ class QuantizedModel:
     This class represents a quantized model. It provides functionality to quantize a given model.
     """   
      
-    def __init__(self, model = None, quantscale=0.25):
+    def __init__(self, model = None):
         self.quantized_model=None
         self.total_bits=0
-        self.quantscale = quantscale
 
         if model is not None:
             self.quantized_model, _ = self.quantize(model)
-            self.quantscale = model.quantscale
 
     def totalbits(self):
         """
@@ -265,6 +306,7 @@ class QuantizedModel:
                 w         = layer.weight.data
                 QuantType = layer.QuantType
 
+                # print(f'layer: {layer} s:{layer.s})')
                 u, scale, bpw = layer.weight_quant(w)
                 numscale = 0 # TODO: store scale value for "PerOutout" scaling
                 # print (scale)                
@@ -279,7 +321,7 @@ class QuantizedModel:
                     'outgoing_weights': quantized_weight.shape[0],
                     'quantized_weights': quantized_weight.tolist(),
                     'WScale': layer.WScale,
-                    'quantized_scale': scalequant.cpu().numpy().tolist() if layer.WScale=='PerOutput' else [],
+                    # 'quantized_scale': scalequant.cpu().numpy().tolist() if layer.WScale=='PerOutput' else [], # TODO: "PerOutput" scaling
                     'bpw': bpw, # bits per weight
                     'quantization_type': QuantType
                 }

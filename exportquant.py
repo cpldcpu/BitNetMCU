@@ -274,7 +274,6 @@ if __name__ == '__main__':
         QuantType=hyperparameters["QuantType"], 
         NormType=hyperparameters["NormType"],
         WScale=hyperparameters["WScale"],
-        quantscale=hyperparameters["quantscale"]
     ).to(device)
 
     print('Loading model...')    
@@ -300,7 +299,7 @@ if __name__ == '__main__':
 
     print('Quantizing model...')
     # Quantize the model
-    quantized_model = QuantizedModel(model, quantscale=hyperparameters["quantscale"])
+    quantized_model = QuantizedModel(model)
 
     # Print statistics
     print_stats(quantized_model)

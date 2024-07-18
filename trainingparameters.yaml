@@ -1,9 +1,11 @@
 # Quantization settings
 QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130' 
-BPW : 4
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
 WScale: 'PerTensor' # 'PerTensor', 'PerOutput'
-quantscale: 0.25  # How to scale the stddev of each tensor relative to the max value
+
+maxw_algo: 'octav' # 'octav', 'prop' Algorithm used to calculate the clipping parameters (maximum weight)
+maxw_update_until_epoch: 60 # Update clipping parameters until this epoch, they are frozen afterwards
+maxw_quantscale: 0.25  # Used only for clipping_algo='prop'. Determines the relation between stddev of weights and max_weight
 
 # Learning parameters
 batch_size: 128

@@ -7,6 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
 from models import FCMNIST, CNNMNIST
+from BitNetMCU import BitLinear, BitConv2d
 import time
 import random
 import argparse
@@ -124,8 +125,27 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         epoch_time = end_time - start_time
 
         testaccuracy = correct / total * 100
+     
+        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {np.mean(train_loss)} Train accuracy: {trainaccuracy}% Test accuracy: {correct / total * 100}% Time: {epoch_time:.2f} s w_clip: ', end='')
 
-        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {np.mean(train_loss)} Train accuracy: {trainaccuracy}% Test accuracy: {correct / total * 100}% Time: {epoch_time:.2f} sec')
+        # update clipping scalars once per epoch        
+        for i, layer in enumerate(model.modules()):
+            if isinstance(layer, BitLinear) or isinstance(layer, BitConv2d):
+
+                # update clipping scalar 
+                if epoch < hyperparameters['maxw_update_until_epoch']:
+                    layer.update_clipping_scalar(layer.weight, hyperparameters['maxw_algo'], hyperparameters['maxw_quantscale'])
+
+                # calculate entropy of weights
+                w_quant, _, _ = layer.weight_quant(layer.weight)
+                _, counts = np.unique(w_quant.cpu().detach().numpy(), return_counts=True)
+                probabilities = counts / np.sum(counts)             
+                entropy = -np.sum(probabilities * np.log2(probabilities))
+
+                print(f'{layer.s.item():.3f} / {entropy:.2f} b', end=' ')
+
+        print()
+
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
         writer.add_scalar('Loss/test', np.mean(test_loss), epoch+1)
@@ -192,7 +212,6 @@ if __name__ == '__main__':
         QuantType=hyperparameters["QuantType"], 
         NormType=hyperparameters["NormType"],
         WScale=hyperparameters["WScale"],
-        quantscale=hyperparameters["quantscale"]
     ).to(device)
 
     summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)

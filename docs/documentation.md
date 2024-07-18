@@ -667,6 +667,12 @@ There is a rather interesting relationship when looking at standard deviation an
 
 Already for an entropy of around 3 bits, it is possible to roughly maximize accuracy. This suggests that the weights can be compressed further to less than 80% of their original size, for example with an additional [entropy coding step](https://en.wikipedia.org/wiki/Entropy_coding), without loss of accuracy. Its an interesting question, whether this can also be achieved by different weight encoding.
 
+## July 19, 2024: OCTAV Optimum Clipping
+
+<div align="center">
+    <img src="octav.png" width="90%">
+</div>
+
 # References
 
 References and further reading:
