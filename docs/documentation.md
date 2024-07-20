@@ -669,9 +669,42 @@ Already for an entropy of around 3 bits, it is possible to roughly maximize accu
 
 ## July 19, 2024: OCTAV Optimum Clipping
 
+In the previous update I introduced a new hyperparameter to control the quantization step size and indirectly the clipping. It is, however, also possible to to determine an optimum based on the given weight distribution. Such a method, called OCTAV, is presented a recent paper by Nvidia (Sakr et al. [^9]). I found it via [this talk ](https://www.youtube.com/watch?v=gofI47kfD28) by Bill Dally, which is a recommended watch.
+
+The method introduces a clipping parameter `s` that determines the maximum encoded weight-value. Values with a magnitude larger than s will be clipped to s, values with a smaller magnitude are quantized according to the quantization step size. 
+
+The octav algorithm determines the clipping parameter by minimizing the mean squared error `J(s)`between the original and quantized weights: Weight below s contribue to the error with quantization noise `(s*2*2^-bpw)²/12 = s²*4^-bpw / 3`, weight above s with the clipping error `(weight-s)²`. 
+
+<div align="center">
+    <img src="octav_equation.png" width="50%">
+</div>
+
+The clipping parameter `s` that minizes the error can be determined by iteration with the newton method[^9]. The implemention resides in `BitNetMCU.py` and is also shown below.
+
+```python	
+for _ in range(num_iterations):
+    indicator_le = (torch.abs(tensor) <= s).float()
+    indicator_gt = (torch.abs(tensor) > s).float()
+    numerator = torch.sum(torch.abs(tensor) * indicator_gt)
+    denominator = (4**-self.bpw / 3) * torch.sum(indicator_le) + torch.sum(indicator_gt)
+    s = numerator / denominator
+```
+
+The octav method is called after every training epoch to adjust the clipping parameter for each layer. The evolution of s and entropy per layer vs training epoch is shown below.
+
 <div align="center">
     <img src="octav.png" width="90%">
 </div>
+
+Compared to the empirical setting of `quantscale`, the octav method yielded a similar training loss. This means we can reduce the number of hyperparameters to tune.
+
+It appears that octav minimizes the entropy of the weights, without affecting accuracy. This could be interpreted as reducing noise.
+
+<div align="center">
+    <img src="octav_weightdist.png" width="60%">
+</div>
+
+Looking at the distribution, it is curious that there are very few weights with clipped values at the extremes. 
 
 # References
 
@@ -692,3 +725,5 @@ References and further reading:
 [^7] M. Courbariaux et al. *BinaryConnect: Training Deep Neural Networks with binary weights during propagations* [arXiv:1511.00363](https://arxiv.org/abs/1511.00363)
 
 [^8] M. Elhoushi et al. *DeepShift: Towards Multiplication-Less Neural Networks*  [arXiv:1905.13298](https://arxiv.org/abs/1905.13298)
+
+[^9] C. Sakr et al. *Optimal Clipping and Magnitude-aware Differentiation for Improved Quantization-aware Training* [arXiv:2206.06501](https://arxiv.org/abs/2206.06501)

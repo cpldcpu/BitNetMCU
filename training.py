@@ -126,9 +126,10 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
         testaccuracy = correct / total * 100
      
-        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {np.mean(train_loss)} Train accuracy: {trainaccuracy}% Test accuracy: {correct / total * 100}% Time: {epoch_time:.2f} s w_clip: ', end='')
+        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {np.mean(train_loss):.6f} Train accuracy: {trainaccuracy:.2f}% Test accuracy: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
 
         # update clipping scalars once per epoch        
+        totalbits = 0
         for i, layer in enumerate(model.modules()):
             if isinstance(layer, BitLinear) or isinstance(layer, BitConv2d):
 
@@ -142,7 +143,9 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 probabilities = counts / np.sum(counts)             
                 entropy = -np.sum(probabilities * np.log2(probabilities))
 
-                print(f'{layer.s.item():.3f} / {entropy:.2f} b', end=' ')
+                print(f'{layer.s.item():.3f}/{entropy:.2f}', end=' ')
+
+                totalbits += layer.weight.numel() * layer.bpw
 
         print()
 
@@ -154,7 +157,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         writer.flush()
 
     numofweights = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    totalbits = numofweights * hyperparameters['BPW']
+    # totalbits = numofweights * hyperparameters['BPW']
 
     writer.add_hparams(hyperparameters, {'Parameters': numofweights, 'Totalbits': totalbits, 'Accuracy/train': trainaccuracy, 'Accuracy/test': testaccuracy, 'Loss/train': np.mean(train_loss), 'Loss/test': np.mean(test_loss)})
     writer.close()
