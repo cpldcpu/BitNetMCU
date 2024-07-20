@@ -2,8 +2,6 @@
 # Funnel
 
  
-## Refactor code to introduce clipping parameter
-- Freeze clipping parameter at some point? Introduce as option.
 
 ## Implement two step learning schedule
 - Use cosine schedule, but half LR after 50% of epochs
@@ -47,4 +45,7 @@
 ## Implement OCTAV
 - Nvidias approach to achieve good FP4 accuracy in the B200?  **Done**
 - Add documentation **Done**
+
+## Refactor code to introduce clipping parameter
+- Freeze clipping parameter at some point? Introduce as option. -> **done**
 
