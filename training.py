@@ -126,7 +126,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
         testaccuracy = correct / total * 100
      
-        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {np.mean(train_loss):.6f} Train accuracy: {trainaccuracy:.2f}% Test accuracy: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
+        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
 
         # update clipping scalars once per epoch        
         totalbits = 0
@@ -158,6 +158,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
     numofweights = sum(p.numel() for p in model.parameters() if p.requires_grad)
     # totalbits = numofweights * hyperparameters['BPW']
+
+    print(f'TotalBits: {totalbits} TotalBytes: {totalbits/8.0} ')
 
     writer.add_hparams(hyperparameters, {'Parameters': numofweights, 'Totalbits': totalbits, 'Accuracy/train': trainaccuracy, 'Accuracy/test': testaccuracy, 'Loss/train': np.mean(train_loss), 'Loss/test': np.mean(test_loss)})
     writer.close()

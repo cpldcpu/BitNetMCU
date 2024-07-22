@@ -34,8 +34,10 @@ class BitQuant:
 
         if self.QuantType in ['Binary', 'BinarySym']:
             self.bpw = 1
-        elif self.QuantType in ['2bitsym', 'Ternary']: 
+        elif self.QuantType in ['2bitsym']: 
             self.bpw = 2
+        elif self.QuantType in ['Ternary']: 
+            self.bpw = 1.6
         elif self.QuantType in ['4bit', '4bitsym', 'FP130']:
             self.bpw = 4
         elif self.QuantType == '5bitsym':
@@ -60,8 +62,7 @@ class BitQuant:
             numerator = torch.sum(torch.abs(tensor) * indicator_gt)
             denominator = (4**-self.bpw / 3) * torch.sum(indicator_le) + torch.sum(indicator_gt)
             s = numerator / denominator
-
-        return s
+        return s 
 
     def update_clipping_scalar(self, w, algorithm='octav', quantscale=0.25):
         """ 
@@ -119,11 +120,14 @@ class BitQuant:
 
         if self.QuantType == 'FP130':
             scale = 32.0 / self.s
+        if self.QuantType == 'Ternary': # 1.58bits
+            # scale = 1.0 / self.s
+            scale = 1.0 / w.abs().mean().clamp_(min=1e-5)
         else:
             scale = (2.0**(self.bpw-1)) / self.s
 
         if self.QuantType == 'Ternary': # 1.58bits
-            u = (w * scale).round().clamp_(-1, 1) 
+            u = (w * scale ).round().clamp_(-1, 1) 
         elif self.QuantType == 'Binary': # 1 bit
             e = w.mean()
             u = (w - e).sign() 
