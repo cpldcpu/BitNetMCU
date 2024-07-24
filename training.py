@@ -41,7 +41,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         train_data, batch_size=batch_size, shuffle=True,
         num_workers=4, pin_memory=True)
     else:
-        # load entire dataset into gpu for 5x speedup
+        # load entire dataset into GPU for 5x speedup
         train_loader = DataLoader(train_data, batch_size=len(train_data), shuffle=False) # shuffling will be done separately
         entire_dataset = next(iter(train_loader))
         all_train_images, all_train_labels = entire_dataset[0].to(device), entire_dataset[1].to(device)

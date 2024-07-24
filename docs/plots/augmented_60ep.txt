@@ -1,4 +1,4 @@
-w1	w2	w3	L1_weights	L2_weights	L3_weigths	BPW	total kbyte	Layers	test/accuracy
+w1	w2	w3	L1_weights	L2_weights	L3_weights	BPW	total kbyte	Layers	test/accuracy
 64	64	64	16384	4096	4096	4	12.3125	3	99.01
 64	64	0	16384	4096	0	4	10.3125	2	98.79
 64	48	32	16384	3072	1536	4	10.40625	3	98.51
