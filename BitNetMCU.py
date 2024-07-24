@@ -312,7 +312,7 @@ class QuantizedModel:
 
                 # print(f'layer: {layer} s:{layer.s})')
                 u, scale, bpw = layer.weight_quant(w)
-                numscale = 0 # TODO: store scale value for "PerOutout" scaling
+                numscale = 0 # TODO: store scale value for "PerOutput" scaling
                 # print (scale)                
 
                 totalbits += bpw * u.numel() + numscale * 8
