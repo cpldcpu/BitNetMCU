@@ -306,9 +306,9 @@ class QuantizedModel:
         quantized_model = []
         totalbits = 0
         for i, layer in enumerate(model.modules()):
+            print(i, layer.__class__.__name__)
             if isinstance(layer, BitLinear):
                 w         = layer.weight.data
-                QuantType = layer.QuantType
 
                 # print(f'layer: {layer} s:{layer.s})')
                 u, scale, bpw = layer.weight_quant(w)
@@ -327,7 +327,32 @@ class QuantizedModel:
                     'WScale': layer.WScale,
                     # 'quantized_scale': scalequant.cpu().numpy().tolist() if layer.WScale=='PerOutput' else [], # TODO: "PerOutput" scaling
                     'bpw': bpw, # bits per weight
-                    'quantization_type': QuantType
+                    'quantization_type': layer.QuantType
+                }
+                quantized_model.append(layer_info)
+
+            elif isinstance(layer, BitConv2d):
+                w = layer.weight.data
+                u, scale, bpw = layer.weight_quant(w)
+                quantized_weight = u.cpu().numpy()
+
+                totalbits += bpw * u.numel()
+                layer_info = {
+                    'layer_type': 'BitConv2d',
+                    'layer_order': i,
+                    'in_channels': layer.in_channels,
+                    'out_channels': layer.out_channels,
+                    'incoming_x': 0,  # will be updated during inference
+                    'incoming_y': 0,
+                    'outgoing_x': 0,
+                    'outgoing_y': 0,
+                    'kernel_size': layer.kernel_size,
+                    'stride': layer.stride,
+                    'padding': layer.padding,
+                    'groups': layer.groups,
+                    'quantized_weights': quantized_weight.tolist(),
+                    'bpw': bpw,
+                    'quantization_type': layer.QuantType
                 }
                 quantized_model.append(layer_info)
 
@@ -355,17 +380,68 @@ class QuantizedModel:
         current_data = np.round(input_data * scale).clip(-128, 127) 
 
         for layer_info in self.quantized_model[:-1]:  # For all layers except the last one
-            weights = np.array(layer_info['quantized_weights']) 
-            conv = np.dot(current_data, weights.T)  # Matrix multiplication
+            # print(f'layer: {layer_info["layer_type"], layer_info["layer_order"] }')
 
-            if layer_info['WScale']=='PerOutput':
-                scale = np.array(layer_info['quantized_scale']).transpose()
-                conv = conv * scale
+            if layer_info['layer_type'] == 'BitLinear':
 
-            max = np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
-            rescale = np.exp2(np.floor(np.log2(127.0 / max))) # Emulate normalization by shift as in C inference engine
-            # rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)   # Normalize to max 1.7 range
-            current_data = np.round(conv * rescale).clip(0, 127)  # Quantize the output and ReLU
+                if len(current_data.shape) == 4:
+                    # reshape from (batch_size, channels, height, width) to (batch_size, features)
+                    current_data = current_data.reshape(current_data.shape[0], current_data.shape[1] * current_data.shape[2] * current_data.shape[3])
+
+                weights = np.array(layer_info['quantized_weights']) 
+                conv = np.dot(current_data, weights.T)  # Matrix multiplication
+
+                if layer_info['WScale']=='PerOutput':
+                    scale = np.array(layer_info['quantized_scale']).transpose()
+                    conv = conv * scale
+
+                max = np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)
+                rescale = np.exp2(np.floor(np.log2(127.0 / max))) # Emulate normalization by shift as in C inference engine
+                # rescale = 127.0 / np.maximum(conv.max(axis=-1, keepdims=True), 1e-5)   # Normalize to max 1.7 range
+                current_data = np.round(conv * rescale).clip(0, 127)  # Quantize the output and ReLU
+
+            elif layer_info['layer_type'] == 'BitConv2d':
+
+                if len(current_data.shape) == 2:
+                    # Reshape from (batch_size, features) to (batch_size, channels, height, width)
+                    height = width = int(np.sqrt(current_data.shape[1] // layer_info['in_channels']))
+                    current_data = current_data.reshape(current_data.shape[0], layer_info['in_channels'], height, width)
+
+                kernel_size = layer_info['kernel_size'][0]  # Assuming square kernel
+                groups = layer_info['groups']
+                in_channels = layer_info['in_channels']
+                out_channels = layer_info['out_channels']   
+
+                weights = np.array(layer_info['quantized_weights']).reshape(
+                    out_channels, in_channels // groups, kernel_size, kernel_size)
+                
+                # print(f'weights: {weights.shape} data: {current_data.shape}')
+                output = np.zeros((current_data.shape[0], layer_info['out_channels'],
+                                current_data.shape[2] - kernel_size + 1, current_data.shape[3] - kernel_size + 1))
+
+                # update the incoming and outgoing dimensions
+                layer_info['incoming_x'] = current_data.shape[2]
+                layer_info['incoming_y'] = current_data.shape[3]
+
+                layer_info['outgoing_x'] = output.shape[2]   
+                layer_info['outgoing_y'] = output.shape[3]
+
+                for g in range(groups):
+                    for i in range(output.shape[2]):
+                        for j in range(output.shape[3]):
+                            patch = current_data[:, g*(in_channels//groups):(g+1)*(in_channels//groups), 
+                                                i:i+kernel_size, j:j+kernel_size]
+                            group_weights = weights[g*(out_channels//groups):(g+1)*(out_channels//groups)]
+                            output[:, g*(out_channels//groups):(g+1)*(out_channels//groups), i, j] = \
+                                np.sum(patch[:, np.newaxis, :, :, :] * group_weights, axis=(2, 3, 4))
+                        
+
+                # print(f'output: {output.shape}')
+                # Apply ReLU and quantize
+                output = np.maximum(output, 0)
+                max_val = np.max(output, axis=(1, 2, 3), keepdims=True)
+                current_data = np.round(output * (127.0 / max_val)).clip(0, 127).astype(np.int8)
+        
 
         # no renormalization for the last layer
         weights = np.array(self.quantized_model[-1]['quantized_weights'])

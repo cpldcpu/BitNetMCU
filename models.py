@@ -53,6 +53,10 @@ class CNNMNIST(nn.Module):
         self.network_width2 = network_width2
         self.network_width3 = network_width3
 
+        self.conv1 = BitConv2d(1, 16, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='8bit',NormType='None', WScale=WScale)
+        self.conv1b = BitConv2d(16, 16, kernel_size=3, stride=1, padding=0,  groups=16,QuantType='8bit',NormType='None', WScale=WScale)
+        self.conv2 = BitConv2d(16, 96, kernel_size=12, stride=1, padding=0, groups=16,QuantType='Binary',NormType='None', WScale=WScale)
+
         self.fc1 = BitLinear(96 , network_width1,QuantType=QuantType,NormType=NormType, WScale=WScale)
         self.fc2 = BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
@@ -61,10 +65,6 @@ class CNNMNIST(nn.Module):
             self.fcl = BitLinear(network_width3, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
         else:
             self.fcl = BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
-
-        self.conv1 = BitConv2d(1, 16, kernel_size=3, stride=1, padding=0,  groups=1,QuantType='4bitsym',NormType='None', WScale=WScale)
-        self.conv1b = BitConv2d(16, 16, kernel_size=3, stride=1, padding=0,  groups=16,QuantType='4bitsym',NormType='None', WScale=WScale)
-        self.conv2 = BitConv2d(16, 96, kernel_size=12, stride=1, padding=0, groups=16,QuantType='4bitsym',NormType='None', WScale=WScale)
 
         self.dropout = nn.Dropout(0.05)
 

@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 from datetime import datetime
 from BitNetMCU import QuantizedModel
-from models import FCMNIST
+from models import FCMNIST, CNNMNIST
 import math
 import matplotlib.pyplot as plt
 import argparse
@@ -39,8 +39,8 @@ def export_to_hfile(quantized_model, filename, runname):
         raise ValueError("quantized_model is empty or None")
 
     # determine maximum number of activations per layer
-    max_n_activations = max([layer['outgoing_weights'] for layer in quantized_model.quantized_model])
-    
+    # max_n_activations = max([layer['outgoing_weights']  for layer in quantized_model.quantized_model])
+    max_n_activations = 128
 
     with open(filename, 'w') as f:
         f.write(f'// Automatically generated header file\n')
@@ -59,65 +59,108 @@ def export_to_hfile(quantized_model, filename, runname):
         f.write(f'#define MAX_N_ACTIVATIONS {max_n_activations}\n\n')
 
         for layer_info in quantized_model.quantized_model:
-            layer= f'L{layer_info["layer_order"]}'
-            incoming_weights = layer_info['incoming_weights']
-            outgoing_weights = layer_info['outgoing_weights']
-            bpw = layer_info['bpw']
-            weights = np.array(layer_info['quantized_weights'])
-            quantization_type = layer_info['quantization_type']
+            layer = f'L{layer_info["layer_order"]}'
 
-            if (bpw*incoming_weights%32) != 0:
-                raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
+            if layer_info['layer_type'] == 'BitLinear':
 
-            print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
-            
-            data_type = np.uint32
-            
-            if quantization_type == 'Binary':
-                encoded_weights = np.where(weights == -1, 0, 1)
-                QuantID = 1
-            elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
-                encoded_weights = ((weights < 0).astype(data_type) << 1) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
-                QuantID = 2
-            elif quantization_type == '4bitsym': 
-                encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
-                QuantID = 4
-            elif quantization_type == '4bit': 
-                encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
-                QuantID =  8 + 4
-            elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
-                encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
-                QuantID = 16 + 4
-            else:
-                print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
+                incoming_weights = layer_info['incoming_weights']
+                outgoing_weights = layer_info['outgoing_weights']
+                bpw = layer_info['bpw']
+                weights = np.array(layer_info['quantized_weights'])
+                quantization_type = layer_info['quantization_type']
 
-            # pack bits into 32 bit words
-            weight_per_word = 32 // bpw 
-            reshaped_array = encoded_weights.reshape(-1, weight_per_word)
-            
-            bit_positions = 32 - bpw - np.arange(weight_per_word, dtype=data_type) * bpw
-            packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(data_type)
-            
-            # print(f'weights: {weights.shape} {weights.flatten()[0:16]}')
-            # print(f'Encoded weights: {encoded_weights.shape} {encoded_weights.flatten()[0:16]}')
-            # print(f'Packed weights: {packed_weights.shape} {", ".join(map(lambda x: hex(x), packed_weights.flatten()[0:4]))}')
+                if (bpw*incoming_weights%32) != 0:
+                    raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
-            # Write layer order, shape, shiftright and weights to the file
-            f.write(f'// Layer: {layer}\n')
-            f.write(f'// QuantType: {quantization_type}\n')
+                print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
+                
+                data_type = np.uint32
+                
+                if quantization_type == 'Binary':
+                    encoded_weights = np.where(weights == -1, 0, 1)
+                    QuantID = 1
+                elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
+                    encoded_weights = ((weights < 0).astype(data_type) << 1) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
+                    QuantID = 2
+                elif quantization_type == '4bitsym': 
+                    encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
+                    QuantID = 4
+                elif quantization_type == '4bit': 
+                    encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
+                    QuantID =  8 + 4
+                elif quantization_type == '8bit': 
+                    encoded_weights = np.floor(weights).astype(int) & 255  # twos complement encoding
+                    QuantID =  8 
+                elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
+                    encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
+                    QuantID = 16 + 4
+                else:
+                    print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
 
-            f.write(f'#define {layer}_active\n')
-            f.write(f'#define {layer}_bitperweight {QuantID}\n')
-            f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
-            f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
+                # pack bits into 32 bit words
+                weight_per_word = 32 // bpw 
+                reshaped_array = encoded_weights.reshape(-1, weight_per_word)
+                
+                bit_positions = 32 - bpw - np.arange(weight_per_word, dtype=data_type) * bpw
+                packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(data_type)
+                
+                # print(f'weights: {weights.shape} {weights.flatten()[0:16]}')
+                # print(f'Encoded weights: {encoded_weights.shape} {encoded_weights.flatten()[0:16]}')
+                # print(f'Packed weights: {packed_weights.shape} {", ".join(map(lambda x: hex(x), packed_weights.flatten()[0:4]))}')
 
-            f.write(f'const uint32_t {layer}_weights[] = {{')         
-            for i,data in enumerate(packed_weights.flatten()):
-                if i&7 ==0:
-                    f.write('\n\t')
-                f.write(f'0x{data:08x},')
-            f.write('\n}; //first channel is topmost bit\n\n')
-           
+                # Write layer order, shape, shiftright and weights to the file
+                f.write(f'// Layer: {layer}\n')
+                f.write(f'// QuantType: {quantization_type}\n')
+
+                f.write(f'#define {layer}_active\n')
+                f.write(f'#define {layer}_bitperweight {QuantID}\n')
+                f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
+                f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
+
+                f.write(f'const uint32_t {layer}_weights[] = {{')         
+                for i,data in enumerate(packed_weights.flatten()):
+                    if i&7 ==0:
+                        f.write('\n\t')
+                    f.write(f'0x{data:08x},')
+                f.write('\n}; //first channel is topmost bit\n\n')
+
+            elif layer_info['layer_type'] == 'BitConv2d':
+                in_channels = layer_info['in_channels']
+                out_channels = layer_info['out_channels']
+                incoming_x = layer_info['incoming_x']
+                incoming_y = layer_info['incoming_y']
+                outgoing_x = layer_info['outgoing_x']
+                outgoing_y = layer_info['outgoing_y']
+
+                groups = layer_info['groups']
+                kernel_size = layer_info['kernel_size'][0]  # Assuming square kernel
+                bpw = layer_info['bpw']
+                weights = np.array(layer_info['quantized_weights'])
+
+                f.write(f'// Layer: {layer} (Convolutional)\n')
+                f.write(f'#define {layer}_active\n')
+                f.write(f'#define {layer}_type BitConv2d\n')
+                f.write(f'#define {layer}_in_channels {in_channels}\n')
+                f.write(f'#define {layer}_out_channels {out_channels}\n')
+                f.write(f'#define {layer}_incoming_x {incoming_x}\n')
+                f.write(f'#define {layer}_incoming_y {incoming_y}\n')
+                f.write(f'#define {layer}_outgoing_x {outgoing_x}\n')
+                f.write(f'#define {layer}_outgoing_y {outgoing_y}\n')
+                f.write(f'#define {layer}_kernel_size {kernel_size}\n')
+                f.write(f'#define {layer}_stride 1\n')
+                f.write(f'#define {layer}_padding 0\n')
+                f.write(f'#define {layer}_groups {groups}\n')
+                f.write(f'#define {layer}_bitperweight {bpw}\n')
+
+                f.write(f'const int8_t {layer}_weights[] = {{')
+                for i, data in enumerate(weights.flatten()):
+                    if i % 16 == 0:
+                        f.write('\n\t')
+                    f.write(f'{data},')
+                f.write('\n};\n\n')                
+
+                print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
+
         f.write('#endif\n')
 
 def plot_test_images(test_loader):
@@ -268,6 +311,7 @@ if __name__ == '__main__':
 
     # Initialize the network and optimizer
     model = FCMNIST(
+    # model = CNNMNIST(
         network_width1=hyperparameters["network_width1"], 
         network_width2=hyperparameters["network_width2"], 
         network_width3=hyperparameters["network_width3"], 
@@ -305,7 +349,7 @@ if __name__ == '__main__':
     print_stats(quantized_model)
 
     if showplots:
-        plot_weights(quantized_model)
+        # plot_weights(quantized_model)
         # plot_statistics(quantized_model)
         plot_weight_histograms(quantized_model)
         # plot_test_images(test_loader)
