@@ -26,6 +26,8 @@
     - [FP1.3.0 Quantization](#fp130-quantization)
     - [4-bit ones complement quantization](#4-bit-ones-complement-quantization)
   - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
+  - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
+  - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
 - [References](#references)
 
 
@@ -706,6 +708,88 @@ It appears that octav minimizes the entropy of the weights, without affecting ac
 
 Looking at the distribution, it is curious that there are very few weights with clipped values at the extremes. 
 
+## July 26, 2024: NormalFloat4 (NF4) Quantization
+
+Normalfloat is a data type that was introduced in the QLoRa paper by T. Dettmers[^10]. The idea is to map 4-bit weights in a way where more values are available around zero, which is the most common value for weights. The data type is information-theoretically optimized for normally distributed weights.
+
+<div align="center">
+    <img src="NF4plot.png" width="50%">
+</div>
+
+The plot above shows the weight encoding. Typically, this datatype is used for post-quantization, but it also makes sense for QAT, since the weight distribution follows a normal distribution as well.
+
+To implement this datatype, it is necessary to quantize values according to an encoding table. The Python implementation (proposed by 3.5-Sonnet) is shown below. Frankly, I am quite impressed by the implementation, which hardly increased training time.
+
+```python
+    ...
+    elif self.QuantType == 'NF4':
+        # NF4 levels (16 levels for 4 bits)
+        levels = torch.tensor([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+                                0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0], device=w.device)
+        u , _ = self.quantize_list(w * scale, levels)
+    ...
+
+    def quantize_list(self, x, levels):
+    """
+    Quantize the input tensor x to the nearest level in the levels list.
+    """        
+    # Compute the absolute difference between x and each level
+    diff = torch.abs(x.unsqueeze(-1) - levels)
+    # Find the index of the closest level for each element in x
+    indices = torch.argmin(diff, dim=-1)
+
+    return levels[indices], indices
+```
+
+Initial tests showed that `NF4` performed similarly to the linear 4-bit encoding `4bitsym`. To get a better assessment of the initial model capacity enabled by this datatype, I performed a scaling experiment where I varied the number of weights in the model by changing the width of the model in three steps (40, 48, 56). I intentionally kept the model size below capacity for MNIST (~64 width for the fc model) to avoid saturating the model capacity. I used short training runs (20 epochs) to save time.
+
+<div align="center">
+    <img src="NF4lossplots.png" width="80%">
+</div>
+
+Similar to the network scaling experiment above, we can now plot training loss vs. model capacity. The plot below shows the results for three different quantization schemes: `NF4`, `4bitsym`, and `FP130`.
+
+<div align="center">
+    <img src="NF4scaling.png" width="60%">
+</div>
+
+We see that the `NF4` encoding consistently leads to lower loss at the same network size than both `4bitsym` and `FP130`. `FP130` performs the worst, which is likely due to poor code use because of the exponential encoding.
+
+To achieve the same loss, an `NF4` encoded model requires ~3% fewer parameters than `4bitsym`, while `FP130` requires ~10% more.
+
+The benefit is rather small, most likely because quantization-aware training is generally very good at adapting to any quantization scheme.
+
+I have not yet implemented C-based inference code for `NF4`; however, it would allow for efficient implementation with table lookups. For example, W4A4 would require a 256-entry table to multiply one weight with one activation, which is rather small. In that case, `NF4` encoding could also be used for activations.
+- [BitNetMCU](#bitnetmcu)
+- [Introduction and Motivation](#introduction-and-motivation)
+  - [Background](#background)
+- [Implementation of training code](#implementation-of-training-code)
+- [Model Optimization](#model-optimization)
+  - [Quantization Aware Training vs Post-Quantization](#quantization-aware-training-vs-post-quantization)
+    - [Model Capacity vs Quantization scaling](#model-capacity-vs-quantization-scaling)
+    - [Test Accuracy and Loss](#test-accuracy-and-loss)
+  - [Optimizing training parameters](#optimizing-training-parameters)
+    - [Learning rate and number of epochs](#learning-rate-and-number-of-epochs)
+    - [Data Augmentation](#data-augmentation)
+- [Architecture of the Inference Engine](#architecture-of-the-inference-engine)
+  - [Implementation in Ansi-C](#implementation-in-ansi-c)
+    - [fc-layer](#fc-layer)
+    - [ShiftNorm / ReLU block](#shiftnorm--relu-block)
+- [Putting it all together](#putting-it-all-together)
+  - [Model Exporting](#model-exporting)
+  - [Verification of the Ansi-C Inference Engine vs. Python](#verification-of-the-ansi-c-inference-engine-vs-python)
+  - [Implementation on the CH32V003](#implementation-on-the-ch32v003)
+- [Summary and Conclusions](#summary-and-conclusions)
+- [Updates](#updates)
+  - [May 20, 2024: Additional quantization schemes](#may-20-2024-additional-quantization-schemes)
+    - [FP1.3.0 Quantization](#fp130-quantization)
+    - [4-bit ones complement quantization](#4-bit-ones-complement-quantization)
+  - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
+  - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
+  - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
+- [References](#references)
+
+
 # References
 
 References and further reading:
@@ -727,3 +811,5 @@ References and further reading:
 [^8]: M. Elhoushi et al. *DeepShift: Towards Multiplication-Less Neural Networks*  [arXiv:1905.13298](https://arxiv.org/abs/1905.13298)
 
 [^9]: C. Sakr et al. *Optimal Clipping and Magnitude-aware Differentiation for Improved Quantization-aware Training* [arXiv:2206.06501](https://arxiv.org/abs/2206.06501)
+
+[^10]: T. Dettmers et al. *QLoRA: Efficient Finetuning of Quantized LLMs* [[arXiv:2305.14314]](https://arxiv.org/pdf/2305.14314)

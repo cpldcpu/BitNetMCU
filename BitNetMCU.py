@@ -16,6 +16,7 @@ class BitQuant:
     - 2bitsym        : 2 bit symmetric
     - 4bitsym        : 4 bit symmetric
     - FP130          : 4 bit shift encoding
+    - NF4            : 4 bit non-linear quantization (NormalFloat4)
     - 8bit           : 8 bit
 
     WScale 
@@ -38,7 +39,7 @@ class BitQuant:
             self.bpw = 2
         elif self.QuantType in ['Ternary']: 
             self.bpw = 1.6
-        elif self.QuantType in ['4bit', '4bitsym', 'FP130']:
+        elif self.QuantType in ['4bit', '4bitsym', 'FP130' , 'NF4']:
             self.bpw = 4
         elif self.QuantType == '5bitsym':
             self.bpw = 5
@@ -119,8 +120,10 @@ class BitQuant:
         """
 
         if self.QuantType == 'FP130':
-            scale = 32.0 / self.s
-        if self.QuantType == 'Ternary': # 1.58bits
+           scale = 128.0 / self.s
+        elif self.QuantType == 'NF4':
+            scale = 1.0 / self.s
+        elif self.QuantType == 'Ternary': # 1.58bits
             # scale = 1.0 / self.s
             scale = 1.0 / w.abs().mean().clamp_(min=1e-5)
         else:
@@ -143,6 +146,11 @@ class BitQuant:
         elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 128
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
             u = w.sign()*(e.exp2())    
+        elif self.QuantType == 'NF4':
+            # NF4 levels (16 levels for 4 bits)
+            levels = torch.tensor([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+                                   0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0], device=w.device)
+            u , _ = self.quantize_list(w * scale, levels)
         elif self.QuantType == '5bitsym':
             u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5)
         elif self.QuantType == '8bit': # -128 to 127
@@ -152,6 +160,17 @@ class BitQuant:
         
         return u, scale, self.bpw
 
+    def quantize_list(self, x, levels):
+        """
+        Quantize the input tensor x to the nearest level in the levels list.
+        """        
+        # Compute the absolute difference between x and each level
+        diff = torch.abs(x.unsqueeze(-1) - levels)
+        # Find the index of the closest level for each element in x
+        indices = torch.argmin(diff, dim=-1)
+
+        return levels[indices], indices
+    
 class BitLinear(nn.Linear, BitQuant):
     """
     Linear fully connected layer with quantization aware training and normalization.

@@ -88,6 +88,11 @@ def export_to_hfile(quantized_model, filename, runname):
                 elif quantization_type == '4bit': 
                     encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
                     QuantID =  8 + 4
+                elif quantization_type == 'NF4': 
+                    levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+                                   0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0])
+                    encoded_weights = np.argmin(np.abs(weights[:, :, np.newaxis] - levels), axis=2)
+                    QuantID = 32 + 4  
                 elif quantization_type == '8bit': 
                     encoded_weights = np.floor(weights).astype(int) & 255  # twos complement encoding
                     QuantID =  8 
