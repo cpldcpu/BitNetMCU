@@ -57,3 +57,4 @@ The data pipeline is split into several Python scripts for flexibility:
 - 20th May 2024 - Added ```quantscale``` as a hyperparameter to influence weight scaling. [Updated documentation on new quantization schemes](https://github.com/cpldcpu/BitNetMCU/blob/main/docs/documentation.md#may-20-2024-additional-quantization-schemes).
 - 26th May 2024 - [tagged version 0.2a](https://github.com/cpldcpu/BitNetMCU/tree/0.2a)
 - 19th July 2024 - [Added octav algorithm](https://github.com/cpldcpu/BitNetMCU/blob/main/docs/documentation.md#july-19-2024-octav-optimum-clipping) to calculate optimal clipping and quantization parameters.
+- 26th July 2024 -  Added support for NormalFloat4 (NF4) Quantization. [Updated documentation](docs/documentation.md#july-26-2024-normalfloat4-nf4-quantization)
