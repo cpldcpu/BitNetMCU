@@ -95,7 +95,7 @@ def export_to_hfile(quantized_model, filename, runname):
                     QuantID = 32 + 4  
                 elif quantization_type == '8bit': 
                     encoded_weights = np.floor(weights).astype(int) & 255  # twos complement encoding
-                    QuantID =  8 
+                    QuantID =  8 + 8
                 elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
                     encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
                     QuantID = 16 + 4

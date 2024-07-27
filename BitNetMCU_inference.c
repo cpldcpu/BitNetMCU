@@ -151,6 +151,16 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 4;
                 }
             }
+        } else if (bits_per_weight == 8 + 8 ) {   // 8 bit twos-complement
+            for (uint32_t k = 0; k < n_input; k+=4) {
+                int8_t weightChunk = *weightidx++;
+                for (uint32_t j = 0; j < 4; j++) {
+                    int32_t in=*activations_idx++;
+                    int32_t weight = (weightChunk) >> (32-8); // extend sign, cut off lower bits
+                    sum += in*weight;
+                    weightChunk <<= 8;
+                }
+            }
 #endif
         }  else if (bits_per_weight == 16 + 4 ) {  // 4 bit shift
             for (uint32_t k = 0; k < n_input; k+=8) {

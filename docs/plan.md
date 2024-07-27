@@ -12,13 +12,13 @@
 - Used in Bitnet paper and matmulless paper
 
 ## Investigate network capacity scaling also with data augmentation
-- Is totnumofbits still limiting network capacity with augmentation?
-- Does regularization with low bit quants help?
+- Is totnumofbits still limiting network capacity with augmentation? -> yes
+- Does regularization with low bit quants help? -> a bit, (<5%)
 - Once network is large enough, curves should saturate
 
 ## Implement pruning to optimize density
 
-- Start with larger network then target, then use pruning/distillation
+- Start with larger network than target, then use pruning/distillation
 
 ## Lottery ticket search
 
