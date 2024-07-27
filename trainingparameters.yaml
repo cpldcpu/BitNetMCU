@@ -9,12 +9,17 @@ maxw_update_until_epoch: 60 # Update clipping parameters until this epoch, they 
 maxw_quantscale: 0.25  # Used only for clipping_algo='prop'. Determines the relation between stddev of weights and max_weight
 
 # Learning parameters
-num_epochs: 60
+num_epochs: 90
 batch_size: 128
 scheduler: "Cosine" # "StepLR", "Cosine"
 learning_rate: 0.001
 lr_decay: 0.1     # lr_decay and step size are not used with cosine scheduler
 step_size: 10
+
+# SWA parameters
+swa_start: 60  # Epoch to start SWA, set to value larger than num_epochs to disable SWA
+swa_lr: 0.01    # SWA learning rate
+swa_cycle_length: 5  # Length of cyclic learning r
 
 # Data augmentation
 augmentation: True

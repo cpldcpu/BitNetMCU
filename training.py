@@ -13,6 +13,7 @@ import random
 import argparse
 import yaml
 from torchsummary import summary
+from simpleswa import SimpleSWA
 
 #----------------------------------------------
 # BitNetMCU training
@@ -53,6 +54,10 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+    swa = SimpleSWA(model, swa_start=hyperparameters["swa_start"], 
+                    swa_lr=hyperparameters["swa_lr"], 
+                    cycle_length=hyperparameters["swa_cycle_length"])
+
     if hyperparameters["scheduler"] == "StepLR":
         scheduler = StepLR(optimizer, step_size=step_size, gamma=lr_decay)
     elif hyperparameters["scheduler"] == "Cosine":
@@ -73,6 +78,10 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         train_loss=[]
         start_time = time.time()
 
+        lr = swa.get_lr(epoch, learning_rate)
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+            
         if hyperparameters["augmentation"]:
             for i, (images, labels) in enumerate(train_loader):
                 images, labels = images.to(device), labels.to(device)
@@ -102,7 +111,10 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 train_loss.append(loss.item())
                 correct += (predicted == labels).sum().item()
 
+
+
         scheduler.step()
+        swa.update(epoch)
 
         trainaccuracy = correct / len(train_loader.dataset) * 100
 
@@ -121,12 +133,31 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
+        testaccuracy = correct / total * 100
+
+        swa_correct = 0
+        swa_total = 0
+        swa_loss = []
+        with torch.no_grad():
+            for i in range(len(all_test_images) // batch_size):
+                images = all_test_images[i * batch_size:(i + 1) * batch_size]
+                labels = all_test_labels[i * batch_size:(i + 1) * batch_size]
+
+                outputs = swa.get_final_model()(images)
+                _, predicted = torch.max(outputs.data, 1)
+                loss = criterion(outputs, labels)
+                swa_loss.append(loss.item())            
+                swa_total += labels.size(0)
+                swa_correct += (predicted == labels).sum().item()
+
+        swaaccuracy = swa_correct / swa_total * 100
+
+
         end_time = time.time()
         epoch_time = end_time - start_time
 
-        testaccuracy = correct / total * 100
      
-        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
+        print(f'Epoch [{epoch+1}/{num_epochs}], Tr_loss:{np.mean(train_loss):.6f} Tr_acc: {trainaccuracy:.2f}% Te_loss:{np.mean(test_loss):.6f} Te_acc: {correct / total * 100:.2f}% SWA_loss:{np.mean(swa_loss):.6f} SWA_acc: {swaaccuracy:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
 
         # update clipping scalars once per epoch        
         totalbits = 0
@@ -148,6 +179,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 totalbits += layer.weight.numel() * layer.bpw
 
         print()
+
 
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
