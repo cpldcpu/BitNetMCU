@@ -760,35 +760,6 @@ To achieve the same loss, an `NF4` encoded model requires ~3% fewer parameters t
 The benefit is rather small, most likely because quantization-aware training is generally very good at adapting to any quantization scheme.
 
 I have not yet implemented C-based inference code for `NF4`; however, it would allow for efficient implementation with table lookups. For example, W4A4 would require a 256-entry table to multiply one weight with one activation, which is rather small. In that case, `NF4` encoding could also be used for activations.
-- [BitNetMCU](#bitnetmcu)
-- [Introduction and Motivation](#introduction-and-motivation)
-  - [Background](#background)
-- [Implementation of training code](#implementation-of-training-code)
-- [Model Optimization](#model-optimization)
-  - [Quantization Aware Training vs Post-Quantization](#quantization-aware-training-vs-post-quantization)
-    - [Model Capacity vs Quantization scaling](#model-capacity-vs-quantization-scaling)
-    - [Test Accuracy and Loss](#test-accuracy-and-loss)
-  - [Optimizing training parameters](#optimizing-training-parameters)
-    - [Learning rate and number of epochs](#learning-rate-and-number-of-epochs)
-    - [Data Augmentation](#data-augmentation)
-- [Architecture of the Inference Engine](#architecture-of-the-inference-engine)
-  - [Implementation in Ansi-C](#implementation-in-ansi-c)
-    - [fc-layer](#fc-layer)
-    - [ShiftNorm / ReLU block](#shiftnorm--relu-block)
-- [Putting it all together](#putting-it-all-together)
-  - [Model Exporting](#model-exporting)
-  - [Verification of the Ansi-C Inference Engine vs. Python](#verification-of-the-ansi-c-inference-engine-vs-python)
-  - [Implementation on the CH32V003](#implementation-on-the-ch32v003)
-- [Summary and Conclusions](#summary-and-conclusions)
-- [Updates](#updates)
-  - [May 20, 2024: Additional quantization schemes](#may-20-2024-additional-quantization-schemes)
-    - [FP1.3.0 Quantization](#fp130-quantization)
-    - [4-bit ones complement quantization](#4-bit-ones-complement-quantization)
-  - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
-  - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
-  - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
-- [References](#references)
-
 
 # References
 
