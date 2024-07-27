@@ -2,6 +2,10 @@
 # Funnel
 
  
+## Implement Conv2d 
+
+- Done with training code and exportquant.py
+- TODO: Implement in C
 
 ## Implement two step learning schedule
 - Use cosine schedule, but half LR after 50% of epochs
