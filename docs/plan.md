@@ -1,7 +1,29 @@
+# Plan
+- [Plan](#plan)
+- [Funnel](#funnel)
+  - [Implement Conv2d](#implement-conv2d)
+  - [Implement two step learning schedule](#implement-two-step-learning-schedule)
+  - [Investigate network capacity scaling also with data augmentation](#investigate-network-capacity-scaling-also-with-data-augmentation)
+  - [Implement pruning to optimize density](#implement-pruning-to-optimize-density)
+  - [Lottery ticket search](#lottery-ticket-search)
+  - [1.58 bit inference](#158-bit-inference)
+  - [4.6 bit quantization](#46-bit-quantization)
+- [Parking lot](#parking-lot)
+  - [Optimize fc model](#optimize-fc-model)
+  - [Stochastic weight averaging](#stochastic-weight-averaging)
+  - [Regularization by switching quantization levels](#regularization-by-switching-quantization-levels)
+- [Done](#done)
+  - [Implement OCTAV](#implement-octav)
+  - [Refactor code to introduce clipping parameter](#refactor-code-to-introduce-clipping-parameter)
+
+---
+
+
+
 
 # Funnel
 
- 
+
 ## Implement Conv2d 
 
 - Done with training code and exportquant.py
@@ -22,9 +44,7 @@
 
 ## Lottery ticket search
 
-## Stochastic weight averaging
 
-- Average local minima for better generalization
 
 ## 1.58 bit inference
 
@@ -43,6 +63,46 @@
 - mixed quantization, use 2 bit for first layers to compress data
 - increase number of first layer features to extract
   - tested 2 bit first layer with 96 features and 4 bit for rest. No improvement.
+
+## Stochastic weight averaging
+
+- Average local minima for better generalization
+
+  * Implemented in extra branch, performance quite mixed so far.
+  * One issue is that there is no straightforward way to average weights in combination with quantization. Averaging will move away the weights from the quantization levels, which will add noise. 
+  * So far, SWA is usually worse than the normally trained model.
+  * Astonishingly, the cyclic learning rate does not seem to be significantly worse than the cosine schedule on standard model.
+  * 
+SWA model updated
+Epoch [85/90], Tr_loss:0.060427 Tr_acc: 98.07% Te_loss:0.041853 Te_acc: 98.62% SWA_loss:0.039543 SWA_acc: 98.75% Time[s]: 19.46 w_clip/entropy[bits]: 1.428/3.59 1.168/3.86 0.931/3.73 1.057/3.88 
+Epoch [86/90], Tr_loss:0.110980 Tr_acc: 96.49% Te_loss:0.060551 Te_acc: 98.12% SWA_loss:0.039543 SWA_acc: 98.75% Time[s]: 19.45 w_clip/entropy[bits]: 1.428/3.63 1.168/3.85 0.931/3.70 1.057/3.87 
+Epoch [87/90], Tr_loss:0.094380 Tr_acc: 96.97% Te_loss:0.056176 Te_acc: 98.30% SWA_loss:0.039543 SWA_acc: 98.75% Time[s]: 19.60 w_clip/entropy[bits]: 1.428/3.64 1.168/3.85 0.931/3.69 1.057/3.88 
+Epoch [88/90], Tr_loss:0.083052 Tr_acc: 97.37% Te_loss:0.051770 Te_acc: 98.47% SWA_loss:0.039543 SWA_acc: 98.75% Time[s]: 19.35 w_clip/entropy[bits]: 1.428/3.64 1.168/3.84 0.931/3.70 1.057/3.88 
+Epoch [89/90], Tr_loss:0.069970 Tr_acc: 97.72% Te_loss:0.043877 Te_acc: 98.56% SWA_loss:0.039543 SWA_acc: 98.75% Time[s]: 19.48 w_clip/entropy[bits]: 1.428/3.63 1.168/3.85 0.931/3.70 1.057/3.87 
+SWA model updated
+Epoch [90/90], Tr_loss:0.060022 Tr_acc: 98.09% Te_loss:0.038376 Te_acc: 98.83% SWA_loss:0.038772 SWA_acc: 98.74% Time[s]: 19.35 w_clip/entropy[bits]: 1.428/3.63 1.168/3.85 0.931/3.71 1.057/3.87 
+
+## Regularization by switching quantization levels
+
+- starting with both higher and lower quantization tha the target seems to cause higher loss.                                                                                                                                                                   
+- Tried: start with 2bit, switch to 4bit at ep30
+- start with 8 bit switch to 4 bit at ep10 and ep30 -> lower loss when switching at ep10
+
+**code**
+
+```python	
+
+        if epoch == 10:
+            switch_quantization(model, 'NF4')
+
+def switch_quantization(model, new_QuantType):
+    for module in model.modules():
+        if isinstance(module, (BitLinear, BitConv2d)):
+            module.QuantType = new_QuantType
+          
+```
+
+
 
 # Done
 
