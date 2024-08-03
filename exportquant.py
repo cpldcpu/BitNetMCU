@@ -4,12 +4,13 @@ from torch.utils.data import DataLoader
 import numpy as np
 from datetime import datetime
 from BitNetMCU import QuantizedModel
-from models import FCMNIST, CNNMNIST
+# from models import FCMNIST, CNNMNIST
 import math
 import matplotlib.pyplot as plt
 import argparse
 import yaml
 import seaborn as sns
+import importlib
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
@@ -19,11 +20,25 @@ import seaborn as sns
 showplots = True # display plots with statistics
 
 def create_run_name(hyperparameters):
-    runname = hyperparameters["runtag"] + hyperparameters["scheduler"] + '_lr' + str(hyperparameters["learning_rate"]) + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
+    runname = hyperparameters["runtag"] + '_' + hyperparameters["model"] + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["QuantType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_epochs" + str(hyperparameters["num_epochs"])
     hyperparameters["runname"] = runname
     return runname
 
-
+def load_model(model_name, params):
+    try:
+        module = importlib.import_module('models')
+        model_class = getattr(module, model_name)
+        return model_class(
+            network_width1=params["network_width1"],
+            network_width2=params["network_width2"],
+            network_width3=params["network_width3"],
+            QuantType=params["QuantType"],
+            NormType=params["NormType"],
+            WScale=params["WScale"]
+        )
+    except AttributeError:
+        raise ValueError(f"Model {model_name} not found in models.py")
+    
 def export_to_hfile(quantized_model, filename, runname):
     """
     Exports the quantized model to an Ansi-C header file.
@@ -312,18 +327,7 @@ if __name__ == '__main__':
     # Create data loaders
     test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
 
-    # plot_test_images(test_loader)
-
-    # Initialize the network and optimizer
-    model = FCMNIST(
-    # model = CNNMNIST(
-        network_width1=hyperparameters["network_width1"], 
-        network_width2=hyperparameters["network_width2"], 
-        network_width3=hyperparameters["network_width3"], 
-        QuantType=hyperparameters["QuantType"], 
-        NormType=hyperparameters["NormType"],
-        WScale=hyperparameters["WScale"],
-    ).to(device)
+    model = load_model(hyperparameters["model"], hyperparameters).to(device)
 
     print('Loading model...')    
     try:
