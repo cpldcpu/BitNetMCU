@@ -28,8 +28,8 @@
   - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
   - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
   - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
+  - [Aug 3rd, 2024: Stepped Learning Rate Schedule](#aug-3rd-2024-stepped-learning-rate-schedule)
 - [References](#references)
-
 
 
 # Introduction and Motivation
@@ -760,6 +760,20 @@ To achieve the same loss, an `NF4` encoded model requires ~3% fewer parameters t
 The benefit is rather small, most likely because quantization-aware training is generally very good at adapting to any quantization scheme.
 
 I have not yet implemented C-based inference code for `NF4`; however, it would allow for efficient implementation with table lookups. For example, W4A4 would require a 256-entry table to multiply one weight with one activation, which is rather small. In that case, `NF4` encoding could also be used for activations.
+
+## Aug 3rd, 2024: Stepped Learning Rate Schedule
+
+The Bitnet paper used a learning rate schedule that[^4] with a stepwise reduction after half of the epochs. I implemented a similar behavior by adding a configuration option that halves the learning rate at a designated epoch. To deactivate this behavior, the parameter can be set to an invalid epoch or be commented out.
+
+```
+halve_lr_epoch: 30  # Epoch at which to halve the learning rate 
+```
+The plot below shows different learning rate schedules with and without step reduction at epoch 30 and a starting learning rate of 0.003 and 0.001. (Previous default was lr=0.001 and no halving). (NF4 encoding, 64-width model, 60 epochs total). Accuracy and loss curves for the same runs are shown on the right.
+<div align="center">
+    <img src="schedules.png" width="47%">  <img src="lossvsschedule.png" width="40%">
+</div>
+
+The halving leads to an immediate improvement in training loss; however the benefit compared to the runs without halving is lost at the end of the training run. Interestingly, the halving improves test loss. This suggests that the halving leads to better regularization. The benefits are rather small, though, and may have more effect in datasets where the model capacity is more limiting.
 
 # References
 

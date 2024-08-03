@@ -29,6 +29,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     learning_rate = hyperparameters["learning_rate"]
     step_size = hyperparameters["step_size"]
     lr_decay = hyperparameters["lr_decay"]
+    halve_lr_epoch = hyperparameters.get("halve_lr_epoch", -1)
     runname =  create_run_name(hyperparameters)
 
     # define dataloaders
@@ -103,6 +104,11 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 correct += (predicted == labels).sum().item()
 
         scheduler.step()
+
+        if epoch + 1 == halve_lr_epoch:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= 0.5
+            print(f"Learning rate halved at epoch {epoch + 1}")
 
         trainaccuracy = correct / len(train_loader.dataset) * 100
 
