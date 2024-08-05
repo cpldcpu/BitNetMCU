@@ -1,6 +1,8 @@
 # Plan
 - [Plan](#plan)
 - [Funnel](#funnel)
+  - [Self-compressing models](#self-compressing-models)
+  - [Refactor models.py](#refactor-modelspy)
   - [Implement Conv2d](#implement-conv2d)
   - [Investigate network capacity scaling also with data augmentation](#investigate-network-capacity-scaling-also-with-data-augmentation)
   - [Implement pruning to optimize density](#implement-pruning-to-optimize-density)
@@ -11,6 +13,7 @@
   - [Optimize fc model](#optimize-fc-model)
   - [Stochastic weight averaging](#stochastic-weight-averaging)
   - [Regularization by switching quantization levels](#regularization-by-switching-quantization-levels)
+  - [Distilliation](#distilliation)
 - [Done](#done)
   - [Implement OCTAV](#implement-octav)
   - [Refactor code to introduce clipping parameter](#refactor-code-to-introduce-clipping-parameter)
@@ -21,6 +24,13 @@
 
 # Funnel
 
+
+
+
+
+## Refactor models.py
+
+- See distillation branch for refactored models.py
 
 ## Implement Conv2d 
 
@@ -98,7 +108,50 @@ def switch_quantization(model, new_QuantType):
           
 ```
 
+## Self-compressing models
 
+https://github.com/geohot/ai-notebooks/blob/master/mnist_self_compression.ipynb
+https://twitter.com/realGeorgeHotz/status/1819963680739512550
+https://arxiv.org/pdf/2301.13142
+https://www.cs.toronto.edu/~hinton/absps/colt93.pdf
+https://openreview.net/forum?id=HkgxW0EYDS
+https://arxiv.org/abs/1810.00440
+
+- Some simpler ideas:
+  - Compress feature detection (unlearn redundant feature detectors to reduce computational effort in depthwise CNN)
+- Per layer auto-quantization
+  - auto-scaling not needed
+
+### Results
+
+- Implemented as per-layer quantization learning. One learnable parameter per layer for bit precision, but no parameter for scale due to normalization.
+  - Result: Model tends to overweight this parameter due to strong influence on loss function, "starves itself" to lower bit precision.
+- Quantization learning probably works better if implemented per channel, but this is not easily implemented in inference code.
+- Without quantization learning, the self-compression methods become equal to pruning -> investigate pruning
+
+```python
+        elif self.QuantType == 'SelfCompress':
+            u = (w * scale).round().clamp( -(2.0**(self.bpw-1)) , 2.0**(self.bpw-1) - 1)     
+...
+        elif self.QuantType == 'SelfCompress':
+            self.bpw = nn.Parameter(torch.tensor(8.0))  # Start with 16 bit precision
+...
+def calculate_compression_loss(model):
+    total_bits = 0
+    total_weights = 0
+    for module in model.modules():
+        if isinstance(module, (BitLinear, BitConv2d)):
+            if module.QuantType == 'SelfCompress':
+                total_bits += module.bpw.mean() * module.weight.numel()
+                total_weights += module.weight.numel()
+    return total_bits / total_weights
+```
+
+## Distilliation
+
+- Idea: Distill CNN with better feature detection to fc model. Last layer (classification layer) is frozen and student model is trained with distillation loss from feature detection.
+- See distillation branch 
+- Training works, but no benefit observed. Generally seems a bit instable, may require some bug fixing.
 
 # Done
 
