@@ -1,3 +1,8 @@
+# Description: Training parameters for the training script
+
+# Model selection
+model: 'FCMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model as defined in models.py.
+
 # Quantization settings
 QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4' 
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'

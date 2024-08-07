@@ -6,24 +6,39 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from models import FCMNIST, CNNMNIST
+# from models import FCMNIST, CNNMNIST
 from BitNetMCU import BitLinear, BitConv2d
 import time
 import random
 import argparse
 import yaml
 from torchsummary import summary
+import importlib
 
 #----------------------------------------------
 # BitNetMCU training
-# cpldcpu 2024-03 
 #----------------------------------------------
 
 def create_run_name(hyperparameters):
-    runname = hyperparameters["runtag"] + hyperparameters["scheduler"] + '_lr' + str(hyperparameters["learning_rate"]) + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
+    runname = hyperparameters["runtag"] + '_' + hyperparameters["model"] + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["QuantType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_epochs" + str(hyperparameters["num_epochs"])
     hyperparameters["runname"] = runname
     return runname
 
+def load_model(model_name, params):
+    try:
+        module = importlib.import_module('models')
+        model_class = getattr(module, model_name)
+        return model_class(
+            network_width1=params["network_width1"],
+            network_width2=params["network_width2"],
+            network_width3=params["network_width3"],
+            QuantType=params["QuantType"],
+            NormType=params["NormType"],
+            WScale=params["WScale"]
+        )
+    except AttributeError:
+        raise ValueError(f"Model {model_name} not found in models.py")
+    
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
@@ -214,16 +229,7 @@ if __name__ == '__main__':
         augmented_train_data = datasets.MNIST(root='data', train=True, transform=augmented_transform)
         train_data = ConcatDataset([train_data, augmented_train_data])
 
-    # Initialize the network and optimizer
-    model = FCMNIST(
-    # model = CNNMNIST(
-        network_width1=hyperparameters["network_width1"], 
-        network_width2=hyperparameters["network_width2"], 
-        network_width3=hyperparameters["network_width3"], 
-        QuantType=hyperparameters["QuantType"], 
-        NormType=hyperparameters["NormType"],
-        WScale=hyperparameters["WScale"],
-    ).to(device)
+    model = load_model(hyperparameters["model"], hyperparameters).to(device)
 
     summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)
 
