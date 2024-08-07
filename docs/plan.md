@@ -25,7 +25,9 @@
 # Funnel
 
 
+## Mixture-of-Experts
 
+- Use routing mechanism to reduce the number of depth-wise conv2d to extract features
 
 
 ## Refactor models.py
