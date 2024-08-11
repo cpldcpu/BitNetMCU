@@ -1,7 +1,7 @@
 # Description: Training parameters for the training script
 
 # Model selection
-model: 'FCMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model as defined in models.py.
+model: 'CNNMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model as defined in models.py.
 
 # Quantization settings
 QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4' 
@@ -20,17 +20,22 @@ scheduler: "Cosine" # "StepLR", "Cosine"
 learning_rate: 0.001
 lr_decay: 0.1     # lr_decay and step size are not used with cosine scheduler
 step_size: 10
-# halve_lr_epoch: 30  # Epoch at which to halve the learning rate 
+halve_lr_epoch: 20  # Epoch at which to halve the learning rate 
 
 # Data augmentation
 augmentation: True
 rotation1: 10  # rotation1 and rotation2 are used for data augmentation
 rotation2: 10
 
+# channel pruning settings. Requires "MaskLayer" in the model
+lambda_l1: 0.0005   # L1 regularization parameter for mask learning
+prune_epoch: -1    # Epoch at which to start pruning. -1 means no pruning
+prune_channels: 64  # number of channels to prune
+
 # Model parameters
-network_width1: 64
+network_width1: 96
 network_width2: 64
-network_width3: 64
+network_width3: 0
 
 # name
 runtag: "octav_" # runtag is prefix for runname

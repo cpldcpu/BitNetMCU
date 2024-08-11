@@ -11,6 +11,7 @@ import argparse
 import yaml
 import seaborn as sns
 import importlib
+from models import MaskingLayer
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
@@ -179,8 +180,7 @@ def export_to_hfile(quantized_model, filename, runname):
                     f.write(f'{data},')
                 f.write('\n};\n\n')                
 
-                print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
-
+                print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')                
         f.write('#endif\n')
 
 def plot_test_images(test_loader):
@@ -199,19 +199,20 @@ def plot_test_images(test_loader):
 
 def print_stats(quantized_model):
     for layer_info in quantized_model.quantized_model:
-        weights = np.array(layer_info['quantized_weights'])
-        print()
-        print(f'Layer: {layer_info["layer_order"]}, Max: {np.max(weights)}, Min: {np.min(weights)}, Mean: {np.mean(weights)}, Std: {np.std(weights)}')
+        if layer_info['layer_type'] == 'BitLinear' or layer_info['layer_type'] == 'BitConv2d':
+            weights = np.array(layer_info['quantized_weights'])
+            print()
+            print(f'Layer: {layer_info["layer_order"]}, Max: {np.max(weights)}, Min: {np.min(weights)}, Mean: {np.mean(weights)}, Std: {np.std(weights)}')
 
-        values, counts = np.unique(weights, return_counts=True)
-        probabilities = counts / np.sum(counts)
+            values, counts = np.unique(weights, return_counts=True)
+            probabilities = counts / np.sum(counts)
 
-        print(f'Values: {values}')
-        print(f'Percent: {(probabilities * 100)}')
+            print(f'Values: {values}')
+            print(f'Percent: {(probabilities * 100)}')
 
-        number_of_codes = 2**layer_info['bpw'] 
-        entropy = -np.sum(probabilities * np.log2(probabilities))
-        print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
+            number_of_codes = 2**layer_info['bpw'] 
+            entropy = -np.sum(probabilities * np.log2(probabilities))
+            print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
   
 
 def plot_statistics(quantized_model):
@@ -280,19 +281,57 @@ def plot_weight_histograms(quantized_model):
     fig = plt.figure(figsize=(10, 10))
 
     for layer_index, layer in enumerate(quantized_model.quantized_model):
-        layer_weights = np.array(layer['quantized_weights'])
-        bpw = layer['bpw']
+        if layer['layer_type'] == 'BitConv2d' or layer['layer_type'] == 'BitLinear':
+            layer_weights = np.array(layer['quantized_weights'])
+            bpw = layer['bpw']
 
-        flattened_weights = layer_weights.flatten()
+            flattened_weights = layer_weights.flatten()
 
-        ax = fig.add_subplot(len(quantized_model.quantized_model), 1, layer_index + 1)
+            ax = fig.add_subplot(len(quantized_model.quantized_model), 1, layer_index + 1)
 
-        # ax.hist(flattened_weights, width=1, bins='auto')
-        sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
-        ax.set_title(f'Layer {layer_index+1} Weight Distribution')
+            # ax.hist(flattened_weights, width=1, bins='auto')
+            sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
+            ax.set_title(f'Layer {layer_index+1} Weight Distribution')
 
     plt.tight_layout()  
     plt.show(block=False)
+
+def print_masking_layers(model):
+    masking_layer_count = 0
+    for name, module in model.named_modules():
+        if isinstance(module, MaskingLayer):
+            masking_layer_count += 1
+            mask_params = module.mask.data
+            # mask = torch.sigmoid(mask_params )
+            mask = mask_params
+            active_channels = torch.sum(mask > 0.5).item()
+            total_channels = len(mask)
+            active_percentage = (active_channels / total_channels) * 100
+            print(mask_params)
+            print(f"SoftMaskLayer found in {name}:")
+            print(f"  Total channels: {total_channels}")
+            print(f"  Active channels (mask > 0.5): {active_channels}")
+            print(f"  Pruned channels (mask <= 0.5): {total_channels - active_channels}")
+            print(f"  Active percentage: {active_percentage:.2f}%")
+            
+            print("  Mask parameter statistics:")
+            print(f"    Min: {mask_params.min().item():.4f}")
+            print(f"    Max: {mask_params.max().item():.4f}")
+            print(f"    Mean: {mask_params.mean().item():.4f}")
+            print(f"    Std: {mask_params.std().item():.4f}")
+
+            print("  Soft mask value histogram:")
+            hist = torch.histc(mask_params, bins=10)
+            bin_edges = torch.linspace(mask_params.min(), mask_params.max(), steps=11)
+            for i, count in enumerate(hist):
+                print(f"    {bin_edges[i]:.1f}-{bin_edges[i+1]:.1f}: {count.item():.0f}")
+            
+            print("\n")
+
+    if masking_layer_count == 0:
+        print("No SoftMaskLayers found in the model.")
+    else:
+        print(f"Total SoftMaskLayers found: {masking_layer_count}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training script')
@@ -356,6 +395,8 @@ if __name__ == '__main__':
 
     # Print statistics
     print_stats(quantized_model)
+
+    print_masking_layers(model)
 
     if showplots:
         # plot_weights(quantized_model)

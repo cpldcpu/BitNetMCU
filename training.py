@@ -14,6 +14,7 @@ import argparse
 import yaml
 from torchsummary import summary
 import importlib
+from models import MaskingLayer
 
 #----------------------------------------------
 # BitNetMCU training
@@ -38,7 +39,19 @@ def load_model(model_name, params):
         )
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
+
+# Function to add L1 regularization on the mask
+def add_mask_regularization(model,  lambda_l1):
+    # mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer), None)
+    mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer)), None)
+
+    if mask_layer is None:
+        return 0
     
+    l1_reg = lambda_l1 * torch.norm(mask_layer.mask, 1)
+    return l1_reg
+
+
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
@@ -96,6 +109,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
+                if epoch < hyperparameters['prune_epoch']:
+                    loss += add_mask_regularization(model, hyperparameters["lambda_l1"])
                 loss.backward()
                 optimizer.step()
                 train_loss.append(loss.item())
@@ -113,6 +128,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
+                if epoch < hyperparameters['prune_epoch']:
+                    loss += add_mask_regularization(model, hyperparameters["lambda_l1"])
                 loss.backward()
                 optimizer.step()
                 train_loss.append(loss.item())
@@ -124,6 +141,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.5
             print(f"Learning rate halved at epoch {epoch + 1}")
+
 
         trainaccuracy = correct / len(train_loader.dataset) * 100
 
@@ -169,6 +187,11 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 totalbits += layer.weight.numel() * layer.bpw
 
         print()
+
+        if epoch + 1 == hyperparameters ["prune_epoch"]:
+            for name, module in model.named_modules():
+                if isinstance(module, MaskingLayer):            
+                    pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_channels'], groups=-1)
 
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
