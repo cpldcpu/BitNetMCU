@@ -775,6 +775,26 @@ The plot below shows different learning rate schedules with and without step red
 
 The halving leads to an immediate improvement in training loss; however the benefit compared to the runs without halving is lost at the end of the training run. Interestingly, the halving improves test loss. This suggests that the halving leads to better regularization. The benefits are rather small, though, and may have more effect in datasets where the model capacity is more limiting.
 
+## Aug 15th, 2024: CNN
+
+Total number of bits: 90112 (11.0 kbytes)
+Verifying inference of quantized model in Python and C
+ 1621 Mismatch between inference engines found. Prediction C: 0 Prediction Python: 6 True: 0
+ 1992 Mismatch between inference engines found. Prediction C: 9 Prediction Python: 8 True: 9
+ 2939 Mismatch between inference engines found. Prediction C: 9 Prediction Python: 0 True: 9
+ 6883 Mismatch between inference engines found. Prediction C: 6 Prediction Python: 1 True: 1
+size of test data: 10000
+Mispredictions C: 46 Py: 48
+Overall accuracy C: 99.53999999999999 %
+Overall accuracy Python: 99.52 %
+Mismatches between engines: 4 (0.04%)
+
+![alt text](image-3.png)
+
+# CNN
+![alt text](image.png)
+![alt text](image-2.png)
+![alt text](image-1.png)
 # References
 
 [^1]: S. Ma et al *The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits* ([arXiv:2402.17764](https://arxiv.org/abs/2402.17764)) and [discussion here](https://huggingface.co/papers/2402.17764) 

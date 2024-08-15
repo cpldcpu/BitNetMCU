@@ -14,23 +14,31 @@ maxw_update_until_epoch: 60 # Update clipping parameters until this epoch, they 
 maxw_quantscale: 0.25  # Used only for clipping_algo='prop'. Determines the relation between stddev of weights and max_weight
 
 # Learning parameters
-num_epochs: 60
+num_epochs: 60  # 5, 20, 80
 batch_size: 128
-scheduler: "Cosine" # "StepLR", "Cosine"
+scheduler: "Cosine" # "StepLR", "Cosine", "CosineWarmRestarts"
 learning_rate: 0.001
-lr_decay: 0.1     # lr_decay and step size are not used with cosine scheduler
-step_size: 10
-halve_lr_epoch: 20  # Epoch at which to halve the learning rate 
+
+# CosineWarmRestarts parameters
+# T_0: 5     # Period of the first restart for CosineWarmRestarts - 10+20+40 = 70 epochs, need to step in epoch 69 at minimum LR
+# T_mult: 4  # Factor increasing T_i after a restart
+
+# StepLR parameters
+# lr_decay: 0.1     # lr_decay and step size for StepLR
+# step_size: 10
+
+halve_lr_epoch: 30  # Epoch at which to halve the learning rate - to be used with Cosine schedule 
 
 # Data augmentation
 augmentation: True
 rotation1: 10  # rotation1 and rotation2 are used for data augmentation
 rotation2: 10
 
-# channel pruning settings. Requires "MaskLayer" in the model
-lambda_l1: 0.0005   # L1 regularization parameter for mask learning
-prune_epoch: -1    # Epoch at which to start pruning. -1 means no pruning
-prune_channels: 64  # number of channels to prune
+# channel pruning settings. Requires "MaskLayer" in the model, otherwise these settings have no effect
+lambda_l1: 0.0005         # L1 regularization parameter for mask learning
+prune_epoch: -1           # Epoch at which to start pruning. -1 means no pruning
+prune_groupstoprune: 32   # number of groups to prune
+prune_totalgroups: 96     # total number of groups. e.g. if there are 384 channels and 96 groups, then each group has 4 channels
 
 # Model parameters
 network_width1: 96

@@ -18,7 +18,7 @@ from models import MaskingLayer
 # Note: Hyperparameters are used to generated the filename
 #---------------------------------------------
 
-showplots = True # display plots with statistics
+showplots = False # display plots with statistics
 
 def create_run_name(hyperparameters):
     runname = hyperparameters["runtag"] + '_' + hyperparameters["model"] + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["QuantType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_epochs" + str(hyperparameters["num_epochs"])
@@ -40,7 +40,7 @@ def load_model(model_name, params):
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
     
-def export_to_hfile(quantized_model, filename, runname):
+def export_to_hfile(quantized_model, filename, runname, modelname=''):
     """
     Exports the quantized model to an Ansi-C header file.
 
@@ -55,8 +55,8 @@ def export_to_hfile(quantized_model, filename, runname):
         raise ValueError("quantized_model is empty or None")
 
     # determine maximum number of activations per layer
-    # max_n_activations = max([layer['outgoing_weights']  for layer in quantized_model.quantized_model])
-    max_n_activations = 128
+    max_n_activations = max([layer['incoming_weights']  for layer in quantized_model.quantized_model if 'incoming_weights' in layer])
+    # max_n_activations = 128
 
     with open(filename, 'w') as f:
         f.write(f'// Automatically generated header file\n')
@@ -68,6 +68,9 @@ def export_to_hfile(quantized_model, filename, runname):
 
         f.write('#ifndef BITNETMCU_MODEL_H\n')
         f.write('#define BITNETMCU_MODEL_H\n\n')
+
+        f.write(f'// Model class name as defined in models.py\n')
+        f.write(f'#define MODEL_{modelname}\n\n')
 
         f.write(f'// Number of layers\n')
         f.write(f'#define NUM_LAYERS {len(quantized_model.quantized_model)}\n\n')
@@ -102,7 +105,7 @@ def export_to_hfile(quantized_model, filename, runname):
                     encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                     QuantID = 4
                 elif quantization_type == '4bit': 
-                    encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
+                    encoded_weights = np.floor(weights).astype(data_type) & 15  # twos complement encoding
                     QuantID =  8 + 4
                 elif quantization_type == 'NF4': 
                     levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
@@ -110,7 +113,7 @@ def export_to_hfile(quantized_model, filename, runname):
                     encoded_weights = np.argmin(np.abs(weights[:, :, np.newaxis] - levels), axis=2)
                     QuantID = 32 + 4  
                 elif quantization_type == '8bit': 
-                    encoded_weights = np.floor(weights).astype(int) & 255  # twos complement encoding
+                    encoded_weights = np.floor(weights).astype(data_type) & 255  # twos complement encoding
                     QuantID =  8 + 8
                 elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
                     encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
@@ -134,7 +137,7 @@ def export_to_hfile(quantized_model, filename, runname):
                 f.write(f'// QuantType: {quantization_type}\n')
 
                 f.write(f'#define {layer}_active\n')
-                f.write(f'#define {layer}_bitperweight {QuantID}\n')
+                f.write(f'#define {layer}_bitperweight {QuantID} \n')
                 f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
                 f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
 
@@ -177,10 +180,28 @@ def export_to_hfile(quantized_model, filename, runname):
                 for i, data in enumerate(weights.flatten()):
                     if i % 16 == 0:
                         f.write('\n\t')
-                    f.write(f'{data},')
+                    f.write(f'{int(data)},')
                 f.write('\n};\n\n')                
 
                 print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')                
+
+            elif layer_info['layer_type'] == 'MaxPool2d':
+                pool_size = layer_info['kernel_size']
+                incoming_x = layer_info['incoming_x']
+                incoming_y = layer_info['incoming_y']
+                outgoing_x = layer_info['outgoing_x']
+                outgoing_y = layer_info['outgoing_y']
+
+                f.write(f'#define {layer}_active\n')
+                f.write(f'#define {layer}_type MaxPool2d\n')
+                f.write(f'#define {layer}_pool_size {pool_size}\n')
+                f.write(f'#define {layer}_incoming_x {incoming_x}\n')
+                f.write(f'#define {layer}_incoming_y {incoming_y}\n')
+                f.write(f'#define {layer}_outgoing_x {outgoing_x}\n')
+                f.write(f'#define {layer}_outgoing_y {outgoing_y}\n\n')
+
+                print(f'Layer: {layer} MaxPool2d Pool Size: {pool_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
+               
         f.write('#endif\n')
 
 def plot_test_images(test_loader):
@@ -441,7 +462,7 @@ if __name__ == '__main__':
     print("Exporting model to header file")
     # export the quantized model to a header file
     # export_to_hfile(quantized_model, f'{exportfolder}/{runname}.h')
-    export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname)
+    export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname, hyperparameters["model"])
     
     if showplots:
         plt.show()

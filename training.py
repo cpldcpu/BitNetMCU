@@ -1,7 +1,7 @@
 import torch, torch.nn as nn, torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
@@ -55,8 +55,6 @@ def add_mask_regularization(model,  lambda_l1):
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
-    step_size = hyperparameters["step_size"]
-    lr_decay = hyperparameters["lr_decay"]
     halve_lr_epoch = hyperparameters.get("halve_lr_epoch", -1)
     runname =  create_run_name(hyperparameters)
 
@@ -83,9 +81,13 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     if hyperparameters["scheduler"] == "StepLR":
-        scheduler = StepLR(optimizer, step_size=step_size, gamma=lr_decay)
+        scheduler = StepLR(optimizer, step_size=hyperparameters["step_size"], gamma=hyperparameters["lr_decay"])
     elif hyperparameters["scheduler"] == "Cosine":
         scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)    
+    elif hyperparameters["scheduler"] == "CosineWarmRestarts":
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=hyperparameters["T_0"], T_mult=hyperparameters["T_mult"], eta_min=0)
+    else:
+        raise ValueError("Invalid scheduler")
 
     criterion = nn.CrossEntropyLoss()
 
@@ -191,7 +193,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         if epoch + 1 == hyperparameters ["prune_epoch"]:
             for name, module in model.named_modules():
                 if isinstance(module, MaskingLayer):            
-                    pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_channels'], groups=-1)
+                    pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
 
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
