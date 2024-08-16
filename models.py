@@ -10,7 +10,7 @@ class MaskingLayer(nn.Module):
         self.mask = nn.Parameter(torch.ones(num_channels))  
 
     def forward(self, x):
-        return x * self.mask.view(1, -1)´6ß
+        return x * self.mask.view(1, -1)
    
     def prune_channels(self, prune_number=8, groups=0):
         with torch.no_grad():
