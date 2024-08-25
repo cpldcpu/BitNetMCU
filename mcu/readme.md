@@ -4,12 +4,12 @@ This folder contains a demo that implements the BitNetMCU inference engine on an
 
 ## 📁 File Descriptions
 
-- [`Makefile`](Makefile): The default makefile assumes that you clone ch32v003fun as a submodule. Alternatively, you can change thevariable `CH32V003FUN` in the makefile to point to an alternative installiation location. This Makefile will compile the demo and flash it to the CH32V003 MCU. 
+- [`Makefile`](Makefile): The default makefile assumes that you clone ch32v003fun as a submodule. Alternatively, you can change the variable `CH32V003FUN` in the makefile to point to an alternative installation location. This Makefile will compile the demo and flash it to the CH32V003 MCU. 
 
 - [`funconfig.h`](funconfig.h): Configuration of main clock speed, and SysTick clock source for the CH32V003 MCU.
 
 
-- [`BitNetMCU_model_12k.h`](BitNetMCU_model_12k.h): A model optimized for high accuracy, achieving 94.02% test accuracy on MNIST. 4 Bit weights, 64/64/64 hidden layer width. 13.66 ms inference time.
+- [`BitNetMCU_model_12k.h`](BitNetMCU_model_12k.h): A model optimized for high accuracy, achieving 99.02% test accuracy on MNIST. 4 Bit weights, 64/64/64 hidden layer width. 13.66 ms inference time.
   
 - [`BitNetMCU_model_12k_FP130.h`](BitNetMCU_model_12k_FP130.h): A model optimizing for both accuracy and inference speed by using FP1.3.0 encoding. Achieving 98.86% test accuracy on MNIST. 4 Bit weights, 64/64/64 hidden layer width. 10.17 ms inference time.
 
