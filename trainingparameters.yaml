@@ -1,17 +1,26 @@
+# Description: Training parameters for the training script
+
+# Model selection
+model: 'FCMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model as defined in models.py.
+
 # Quantization settings
-QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130' 
-BPW : 4
+QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4' 
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
 WScale: 'PerTensor' # 'PerTensor', 'PerOutput'
-quantscale: 0.25  # How to scale the stddev of each tensor relative to the max value
+
+# Clipping parameters - only used for 2 bit and higher quantization
+maxw_algo: 'octav' # 'octav', 'prop' Algorithm used to calculate the clipping parameters (maximum weight)
+maxw_update_until_epoch: 60 # Update clipping parameters until this epoch, they are frozen afterwards
+maxw_quantscale: 0.25  # Used only for clipping_algo='prop'. Determines the relation between stddev of weights and max_weight
 
 # Learning parameters
-batch_size: 128
 num_epochs: 60
+batch_size: 128
 scheduler: "Cosine" # "StepLR", "Cosine"
 learning_rate: 0.001
 lr_decay: 0.1     # lr_decay and step size are not used with cosine scheduler
 step_size: 10
+# halve_lr_epoch: 30  # Epoch at which to halve the learning rate 
 
 # Data augmentation
 augmentation: True
@@ -24,4 +33,4 @@ network_width2: 64
 network_width3: 64
 
 # name
-runtag: "opt_" # runtag is prefix for runname
+runtag: "octav_" # runtag is prefix for runname

@@ -6,27 +6,45 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
-from models import FCMNIST
+# from models import FCMNIST, CNNMNIST
+from BitNetMCU import BitLinear, BitConv2d
 import time
 import random
 import argparse
 import yaml
+from torchsummary import summary
+import importlib
 
 #----------------------------------------------
 # BitNetMCU training
-# cpldcpu 2024-03 
 #----------------------------------------------
 
 def create_run_name(hyperparameters):
-    runname = hyperparameters["runtag"] + hyperparameters["scheduler"] + '_lr' + str(hyperparameters["learning_rate"]) + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["WScale"] + "_" +hyperparameters["QuantType"] + "_" + hyperparameters["NormType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_bs" + str(hyperparameters["batch_size"]) + "_epochs" + str(hyperparameters["num_epochs"])
+    runname = hyperparameters["runtag"] + '_' + hyperparameters["model"] + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["QuantType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_epochs" + str(hyperparameters["num_epochs"])
     hyperparameters["runname"] = runname
     return runname
 
+def load_model(model_name, params):
+    try:
+        module = importlib.import_module('models')
+        model_class = getattr(module, model_name)
+        return model_class(
+            network_width1=params["network_width1"],
+            network_width2=params["network_width2"],
+            network_width3=params["network_width3"],
+            QuantType=params["QuantType"],
+            NormType=params["NormType"],
+            WScale=params["WScale"]
+        )
+    except AttributeError:
+        raise ValueError(f"Model {model_name} not found in models.py")
+    
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
     step_size = hyperparameters["step_size"]
     lr_decay = hyperparameters["lr_decay"]
+    halve_lr_epoch = hyperparameters.get("halve_lr_epoch", -1)
     runname =  create_run_name(hyperparameters)
 
     # define dataloaders
@@ -39,7 +57,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         train_data, batch_size=batch_size, shuffle=True,
         num_workers=4, pin_memory=True)
     else:
-        # load entire dataset into gpu for 5x speedup
+        # load entire dataset into GPU for 5x speedup
         train_loader = DataLoader(train_data, batch_size=len(train_data), shuffle=False) # shuffling will be done separately
         entire_dataset = next(iter(train_loader))
         all_train_images, all_train_labels = entire_dataset[0].to(device), entire_dataset[1].to(device)
@@ -102,6 +120,11 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
         scheduler.step()
 
+        if epoch + 1 == halve_lr_epoch:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= 0.5
+            print(f"Learning rate halved at epoch {epoch + 1}")
+
         trainaccuracy = correct / len(train_loader.dataset) * 100
 
         correct = 0
@@ -123,8 +146,30 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         epoch_time = end_time - start_time
 
         testaccuracy = correct / total * 100
+     
+        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
 
-        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {np.mean(train_loss)} Train accuracy: {trainaccuracy}% Test accuracy: {correct / total * 100}% Time: {epoch_time:.2f} sec')
+        # update clipping scalars once per epoch        
+        totalbits = 0
+        for i, layer in enumerate(model.modules()):
+            if isinstance(layer, BitLinear) or isinstance(layer, BitConv2d):
+
+                # update clipping scalar 
+                if epoch < hyperparameters['maxw_update_until_epoch']:
+                    layer.update_clipping_scalar(layer.weight, hyperparameters['maxw_algo'], hyperparameters['maxw_quantscale'])
+
+                # calculate entropy of weights
+                w_quant, _, _ = layer.weight_quant(layer.weight)
+                _, counts = np.unique(w_quant.cpu().detach().numpy(), return_counts=True)
+                probabilities = counts / np.sum(counts)             
+                entropy = -np.sum(probabilities * np.log2(probabilities))
+
+                print(f'{layer.s.item():.3f}/{entropy:.2f}', end=' ')
+
+                totalbits += layer.weight.numel() * layer.bpw
+
+        print()
+
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
         writer.add_scalar('Loss/test', np.mean(test_loss), epoch+1)
@@ -133,7 +178,9 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         writer.flush()
 
     numofweights = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    totalbits = numofweights * hyperparameters['BPW']
+    # totalbits = numofweights * hyperparameters['BPW']
+
+    print(f'TotalBits: {totalbits} TotalBytes: {totalbits/8.0} ')
 
     writer.add_hparams(hyperparameters, {'Parameters': numofweights, 'Totalbits': totalbits, 'Accuracy/train': trainaccuracy, 'Accuracy/test': testaccuracy, 'Loss/train': np.mean(train_loss), 'Loss/test': np.mean(test_loss)})
     writer.close()
@@ -182,16 +229,9 @@ if __name__ == '__main__':
         augmented_train_data = datasets.MNIST(root='data', train=True, transform=augmented_transform)
         train_data = ConcatDataset([train_data, augmented_train_data])
 
-    # Initialize the network and optimizer
-    model = FCMNIST(
-        network_width1=hyperparameters["network_width1"], 
-        network_width2=hyperparameters["network_width2"], 
-        network_width3=hyperparameters["network_width3"], 
-        QuantType=hyperparameters["QuantType"], 
-        NormType=hyperparameters["NormType"],
-        WScale=hyperparameters["WScale"],
-        quantscale=hyperparameters["quantscale"]
-    ).to(device)
+    model = load_model(hyperparameters["model"], hyperparameters).to(device)
+
+    summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)
 
     print('training...')
     train_model(model, device, hyperparameters, train_data, test_data)

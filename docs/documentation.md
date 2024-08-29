@@ -26,13 +26,15 @@
     - [FP1.3.0 Quantization](#fp130-quantization)
     - [4-bit ones complement quantization](#4-bit-ones-complement-quantization)
   - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
+  - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
+  - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
+  - [Aug 3rd, 2024: Stepped Learning Rate Schedule](#aug-3rd-2024-stepped-learning-rate-schedule)
 - [References](#references)
-
 
 
 # Introduction and Motivation
 
-Recently, there has been considerable hype about large language models (LLMs) with "1 Bit" or "1.58 Bit" [^1] weight quantization. The claim is that, by using Quantization Aware Training (QAT), LLMs can be trained with almost no loss of quality when using only binary or ternary encoding of weigths. 
+Recently, there has been considerable hype about large language models (LLMs) with "1 Bit" or "1.58 Bit" [^1] weight quantization. The claim is that, by using Quantization Aware Training (QAT), LLMs can be trained with almost no loss of quality when using only binary or ternary encoding of weights. 
 
 Interestingly, low bit quantization is also advantageous for inference on microcontrollers. The CH32V003 microcontroller gained some notoriety being extremely low cost for a 32 bit MCU (less than $0.15 in low volume), but is also notable for the RV32EC ISA, which supports only 16 registers and lacks a hardware multiplier. It also only has 16kb of flash and 2kb of ram.
 
@@ -50,11 +52,11 @@ Quantization of Deep Neural Networks (DNN) is not a novel concept, a review can 
 
 **Quantization granularity of weights** - The number of bits used to encode the weights. Networks are typically trained with floating point weights, but can be quantized to 8-bit (**W8**), 4-bit (**W4**), 2-bit (**W2**), ternary weights (**W1.58**), or even binary (**W1**) weights. Using fewer bits for weights reduces the memory footprint to store the model data (ROM or Flash in a MCU).
 
-**Quantization granularity of activations** - The number of bits used to encode the activations, the data as it progresses through the neural network. Inference is usually performed with floting point activations. But to reduce memory footprint and increase speed, activations can be quantized to 16-bit integers (**A16**), 8-bit (**A8**) or 1-bit (**A1**) in the most extreme case. Reducing the size of activations helps to preserve RAM during inference.
+**Quantization granularity of activations** - The number of bits used to encode the activations, the data as it progresses through the neural network. Inference is usually performed with floating point activations. But to reduce memory footprint and increase speed, activations can be quantized to 16-bit integers (**A16**), 8-bit (**A8**) or 1-bit (**A1**) in the most extreme case. Reducing the size of activations helps to preserve RAM during inference.
 
 The most extreme case is to quantize both weights and activations to one bit (**W1A1**), as in the XNOR Net[^3]. However, this approach requires increasing the network size dramatically to counteract the loss of information from the activations. Also, handling of single bit information is more cumbersome on a standard 32-bit MCU than handling integers. 
 
-Therefore I will explore scenarios with different weight quantizations, while I keep the activations at 8 bit or more. It seems obvious that QAT is the preferred training approach when targeting inference on a very small microcontroller, but I will also explore post-quantization for comparison.
+Therefore, I will explore scenarios with different weight quantizations, while I keep the activations at 8 bit or more. It seems obvious that QAT is the preferred training approach when targeting inference on a very small microcontroller, but I will also explore post-quantization for comparison.
 
 # Implementation of training code
 
@@ -76,7 +78,7 @@ def forward(self, x):
     return y
 ```
 
-I implemented custom normalization and quantization functions to explore different options. I found no benefit for using batch normalization instead of RMS normalization[^6], hence I used the latter one as in the original BitNet implementation. This choise also simplifies the on-device inference. 
+I implemented custom normalization and quantization functions to explore different options. I found no benefit for using batch normalization instead of RMS normalization[^6], hence I used the latter one as in the original BitNet implementation. This choice also simplifies the on-device inference. 
 
 The implementation of one bit quantization is straight forward, the scale derived from the mean value of the weights in the entire layer.
 
@@ -115,7 +117,7 @@ To investigate the efficacy of QAT, I trained the model with different bit-width
 
 Around 98% accuracy is achieved with 8-bit quantized weights, whether trained with QAT or post-quantization. When a model is quantized to 4-bits or less after training, a significant drop in accuracy is observed. Quantization aware training can distribute the quantization error to other weights and achieves good accuracy even for one bit weights. 
 
-Advanced post-quantization schemes as used in LLMs could improve post-quantization accuracy, but QAT is cleary the preferred approach for this use case.
+Advanced post-quantization schemes as used in LLMs could improve post-quantization accuracy, but QAT is clearly the preferred approach for this use case.
 
 ### Model Capacity vs Quantization scaling
 
@@ -551,7 +553,7 @@ This section outlines additional quantization schemes that improve inference spe
 
 ### FP1.3.0 Quantization
 
-FP1.3.0 or FP130 is a quantization scheme based on 4-bit floating point numbers with 1-bit sign, 3-bit exponent and 0-bit mantissa. Weights are encoded as follows: $w = \text{sign} \times 2^{\text{exponent}}$. This will provide us with weigths as exponents of two without zero: ```-128, -64 ... -2, -1, 1, 2, ... 64, 128```
+FP1.3.0 or FP130 is a quantization scheme based on 4-bit floating point numbers with 1-bit sign, 3-bit exponent and 0-bit mantissa. Weights are encoded as follows: $w = \text{sign} \times 2^{\text{exponent}}$. This will provide us with weights as exponents of two without zero: ```-128, -64 ... -2, -1, 1, 2, ... 64, 128```
 
 The implementation of the inference code in C is extremely effective as only shift operations are required:
 
@@ -609,7 +611,7 @@ The entropy is comparable to other 4 bit encodings, suggesting similar effective
 
 ### 4-bit ones complement quantization
 
-The current implementation of 4 bit quantization ```4bitsym``` uses a symmetric encoding without zero. This is easy to implement on multiplierless MCUs, but becomes unnecessarily complex when a multiplier is available. Therefore I introduced ```4bit``` encoding, which encodes a 4 bit signed value is a one-complement number including zero: ```-8, -7 ... -2, -1, 0, 1, 2, ... 6, 7```.
+The current implementation of 4 bit quantization ```4bitsym``` uses a symmetric encoding without zero. This is easy to implement on multiplierless MCUs, but becomes unnecessarily complex when a multiplier is available. Therefore, I introduced ```4bit``` encoding, which encodes a 4 bit signed value is a one-complement number including zero: ```-8, -7 ... -2, -1, 0, 1, 2, ... 6, 7```.
 
 This allows for a more efficient implementation of the inference code, given that the multiplication instruction is available:
 
@@ -663,13 +665,117 @@ I performed a scan of the parameter for the ```4bitsym``` and ```4bit``` encodin
     <img src="quantscale_entropy.png" width="70%">
 </div>
 
-There is a rather interesting relationship when looking at standard deviation and [information entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) accross the layers. As expected, ```quantscale``` biases the standard deviation in a roughly proportional way. However, we can also see that the entropy increases for higher values. For low settings, this is because most weights are around zero and are truncated. Increasing the scale parameter also increases entropy. However, the accuracy of the model does not benefit, which means that only noise is added and no useful information. 
+There is a rather interesting relationship when looking at standard deviation and [information entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) across the layers. As expected, ```quantscale``` biases the standard deviation in a roughly proportional way. However, we can also see that the entropy increases for higher values. For low settings, this is because most weights are around zero and are truncated. Increasing the scale parameter also increases entropy. However, the accuracy of the model does not benefit, which means that only noise is added and no useful information. 
 
 Already for an entropy of around 3 bits, it is possible to roughly maximize accuracy. This suggests that the weights can be compressed further to less than 80% of their original size, for example with an additional [entropy coding step](https://en.wikipedia.org/wiki/Entropy_coding), without loss of accuracy. Its an interesting question, whether this can also be achieved by different weight encoding.
 
-# References
+## July 19, 2024: OCTAV Optimum Clipping
 
-References and further reading:
+In the previous update I introduced a new hyperparameter to control the quantization step size and indirectly the clipping. It is, however, also possible to determine an optimum based on the given weight distribution. Such a method, called OCTAV, is presented a recent paper by Nvidia (Sakr et al. [^9]). I found it via [this talk ](https://www.youtube.com/watch?v=gofI47kfD28) by Bill Dally, which is a recommended watch.
+
+The method introduces a clipping parameter `s` that determines the maximum encoded weight-value. Values with a magnitude larger than s will be clipped to s, values with a smaller magnitude are quantized according to the quantization step size. 
+
+The octav algorithm determines the clipping parameter by minimizing the mean squared error `J(s)`between the original and quantized weights: Weight below s contribute to the error with quantization noise `(s*2*2^-bpw)²/12 = s²*4^-bpw / 3`, weight above s with the clipping error `(weight-s)²`. 
+
+<div align="center">
+    <img src="octav_equation.png" width="50%">
+</div>
+
+The clipping parameter `s` that minimizes the error can be determined by iteration with the newton method[^9]. The implementation resides in `BitNetMCU.py` and is also shown below.
+
+```python	
+for _ in range(num_iterations):
+    indicator_le = (torch.abs(tensor) <= s).float()
+    indicator_gt = (torch.abs(tensor) > s).float()
+    numerator = torch.sum(torch.abs(tensor) * indicator_gt)
+    denominator = (4**-self.bpw / 3) * torch.sum(indicator_le) + torch.sum(indicator_gt)
+    s = numerator / denominator
+```
+
+The octav method is called after every training epoch to adjust the clipping parameter for each layer. The evolution of s and entropy per layer vs training epoch is shown below.
+
+<div align="center">
+    <img src="octav.png" width="90%">
+</div>
+
+Compared to the empirical setting of `quantscale`, the octav method yielded a similar training loss. This means we can reduce the number of hyperparameters to tune.
+
+It appears that octav minimizes the entropy of the weights, without affecting accuracy. This could be interpreted as reducing noise.
+
+<div align="center">
+    <img src="octav_weightdist.png" width="60%">
+</div>
+
+Looking at the distribution, it is curious that there are very few weights with clipped values at the extremes. 
+
+## July 26, 2024: NormalFloat4 (NF4) Quantization
+
+Normalfloat is a data type that was introduced in the QLoRa paper by T. Dettmers[^10]. The idea is to map 4-bit weights in a way where more values are available around zero, which is the most common value for weights. The data type is information-theoretically optimized for normally distributed weights.
+
+<div align="center">
+    <img src="NF4plot.png" width="50%">
+</div>
+
+The plot above shows the weight encoding. Typically, this datatype is used for post-quantization, but it also makes sense for QAT, since the weight distribution follows a normal distribution as well.
+
+To implement this datatype, it is necessary to quantize values according to an encoding table. The Python implementation (proposed by 3.5-Sonnet) is shown below. Frankly, I am quite impressed by the implementation, which hardly increased training time.
+
+```python
+    ...
+    elif self.QuantType == 'NF4':
+        # NF4 levels (16 levels for 4 bits)
+        levels = torch.tensor([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+                                0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0], device=w.device)
+        u , _ = self.quantize_list(w * scale, levels)
+    ...
+
+    def quantize_list(self, x, levels):
+    """
+    Quantize the input tensor x to the nearest level in the levels list.
+    """        
+    # Compute the absolute difference between x and each level
+    diff = torch.abs(x.unsqueeze(-1) - levels)
+    # Find the index of the closest level for each element in x
+    indices = torch.argmin(diff, dim=-1)
+
+    return levels[indices], indices
+```
+
+Initial tests showed that `NF4` performed similarly to the linear 4-bit encoding `4bitsym`. To get a better assessment of the initial model capacity enabled by this datatype, I performed a scaling experiment where I varied the number of weights in the model by changing the width of the model in three steps (40, 48, 56). I intentionally kept the model size below capacity for MNIST (~64 width for the fc model) to avoid saturating the model capacity. I used short training runs (20 epochs) to save time.
+
+<div align="center">
+    <img src="NF4lossplots.png" width="80%">
+</div>
+
+Similar to the network scaling experiment above, we can now plot training loss vs. model capacity. The plot below shows the results for three different quantization schemes: `NF4`, `4bitsym`, and `FP130`.
+
+<div align="center">
+    <img src="NF4scaling.png" width="60%">
+</div>
+
+We see that the `NF4` encoding consistently leads to lower loss at the same network size than both `4bitsym` and `FP130`. `FP130` performs the worst, which is likely due to poor code use because of the exponential encoding.
+
+To achieve the same loss, an `NF4` encoded model requires ~3% fewer parameters than `4bitsym`, while `FP130` requires ~10% more.
+
+The benefit is rather small, most likely because quantization-aware training is generally very good at adapting to any quantization scheme.
+
+I have not yet implemented C-based inference code for `NF4`; however, it would allow for efficient implementation with table lookups. For example, W4A4 would require a 256-entry table to multiply one weight with one activation, which is rather small. In that case, `NF4` encoding could also be used for activations.
+
+## Aug 3rd, 2024: Stepped Learning Rate Schedule
+
+The Bitnet paper used a learning rate schedule that[^4] with a stepwise reduction after half of the epochs. I implemented a similar behavior by adding a configuration option that halves the learning rate at a designated epoch. To deactivate this behavior, the parameter can be set to an invalid epoch or be commented out.
+
+```
+halve_lr_epoch: 30  # Epoch at which to halve the learning rate 
+```
+The plot below shows different learning rate schedules with and without step reduction at epoch 30 and a starting learning rate of 0.003 and 0.001. (Previous default was lr=0.001 and no halving). (NF4 encoding, 64-width model, 60 epochs total). Accuracy and loss curves for the same runs are shown on the right.
+<div align="center">
+    <img src="schedules.png" width="47%">  <img src="lossvsschedule.png" width="40%">
+</div>
+
+The halving leads to an immediate improvement in training loss; however the benefit compared to the runs without halving is lost at the end of the training run. Interestingly, the halving improves test loss. This suggests that the halving leads to better regularization. The benefits are rather small, though, and may have more effect in datasets where the model capacity is more limiting.
+
+# References
 
 [^1]: S. Ma et al *The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits* ([arXiv:2402.17764](https://arxiv.org/abs/2402.17764)) and [discussion here](https://huggingface.co/papers/2402.17764) 
 
@@ -683,6 +789,10 @@ References and further reading:
 
 [^6]: B. Zhang et al.  *Root Mean Square Layer Normalization* [arXiv:1910.07467](https://arxiv.org/abs/1910.07467)
 
-[^7] M. Courbariaux et al. *BinaryConnect: Training Deep Neural Networks with binary weights during propagations* [arXiv:1511.00363](https://arxiv.org/abs/1511.00363)
+[^7]: M. Courbariaux et al. *BinaryConnect: Training Deep Neural Networks with binary weights during propagations* [arXiv:1511.00363](https://arxiv.org/abs/1511.00363)
 
-[^8] M. Elhoushi et al. *DeepShift: Towards Multiplication-Less Neural Networks*  [arXiv:1905.13298](https://arxiv.org/abs/1905.13298)
+[^8]: M. Elhoushi et al. *DeepShift: Towards Multiplication-Less Neural Networks*  [arXiv:1905.13298](https://arxiv.org/abs/1905.13298)
+
+[^9]: C. Sakr et al. *Optimal Clipping and Magnitude-aware Differentiation for Improved Quantization-aware Training* [arXiv:2206.06501](https://arxiv.org/abs/2206.06501)
+
+[^10]: T. Dettmers et al. *QLoRA: Efficient Finetuning of Quantized LLMs* [[arXiv:2305.14314]](https://arxiv.org/pdf/2305.14314)
