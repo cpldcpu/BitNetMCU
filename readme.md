@@ -1,5 +1,16 @@
 # BitNetMCU: High Accuracy Low-Bit Quantized Neural Networks on a low-end Microcontroller
 
+## What to do next
+
+From Vincent:
+
+```txt
+Similarly, for InspireML and InspireVoice, will also put software on two 8 pin RISC-V with other I2C address,
+suggest InspireML to have input "IMLxxxxxxxxxxxxxxxx" (16 hexadecimal x for 8x8 bits)
+and output "0", ... "9" and "X" for not recognize.
+InspireVoice to have input "IVR" and output "0", ... "9", "X" for not recognize.
+```
+
 ## Note if you use MounRiver GCC
 
 * Install MounRiver Studio and add the following to `PATH`:
