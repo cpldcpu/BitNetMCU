@@ -180,6 +180,7 @@ class BitLinear(nn.Linear, BitQuant):
     - RMS            : Root Mean Square
     - Lin            : L1 Norm
     - BatchNorm      : Batch Normalization
+    - LayerNorm      : Layer Normalization
     
     This is not optimized for speed or efficiency...
 
@@ -228,9 +229,17 @@ class BitLinear(nn.Linear, BitQuant):
             y = torch.mean(torch.abs(x), dim=-1, keepdim=True)
             z =x / y
         elif self.NormType == 'BatchNorm':
-            z = (x - torch.mean(x, dim=-1, keepdim=True)) / (torch.std(x, dim=-1, keepdim=True) + 1e-5)
+            # BatchNorm: normalize across batch dimension
+            batch_mean = torch.mean(x, dim=0, keepdim=True)
+            batch_var = torch.var(x, dim=0, keepdim=True, unbiased=False)
+            z = (x - batch_mean) / torch.sqrt(batch_var + 1e-5)    
+        elif self.NormType == 'LayerNorm':
+            # LayerNorm: normalize across feature dimension
+            layer_mean = torch.mean(x, dim=-1, keepdim=True)
+            layer_var = torch.var(x, dim=-1, keepdim=True, unbiased=False)
+            z = (x - layer_mean) / torch.sqrt(layer_var + 1e-5)
         else:
-            raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm'")
+            raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm', 'LayerNorm'")
         return z
 
 class BitConv2d(nn.Conv2d, BitQuant):
