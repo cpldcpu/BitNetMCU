@@ -24,6 +24,12 @@
 
 # Funnel
 
+## Benchmark Layernorm vs RMSnorm
+
+- Layernorm seems to be better than RMSnorm for very small networks where it improves convergence.
+  - Unclear whether it helps for networks that are at capacity.
+  - Does it help with generalization? 
+  - What is the penalty in terms of computational effort as there are fewer (no) zero activations?
 
 ## Mixture-of-Experts
 
