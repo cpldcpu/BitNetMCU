@@ -39,6 +39,37 @@ def load_model(model_name, params):
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
     
+def log_positive_activations(model, writer, epoch, all_test_images, batch_size):
+    total_activations = 0
+    positive_activations = 0
+
+    def hook_fn(module, input, output):
+        nonlocal total_activations, positive_activations
+        if isinstance(module, nn.ReLU):
+            total_activations += output.numel()
+            positive_activations += (output > 0).sum().item()
+
+    hooks = []
+    for layer in model.modules():
+        if isinstance(layer, nn.ReLU):
+            hooks.append(layer.register_forward_hook(hook_fn))
+
+    # Run a forward pass to trigger hooks
+    with torch.no_grad():
+        for i in range(len(all_test_images) // batch_size):
+            images = all_test_images[i * batch_size:(i + 1) * batch_size]
+            model(images)
+
+    for hook in hooks:
+        hook.remove()
+
+    fraction_positive = positive_activations / total_activations
+    writer.add_scalar('Activations/positive_fraction', fraction_positive, epoch+1)
+
+    return fraction_positive
+    # writer.add_scalar('Activations/positive_fraction', fraction_positive, epoch+1)
+    # print(f'Fraction of positive activations: {fraction_positive:.4f}')
+
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
@@ -142,12 +173,15 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
+        # Log positive activations
+        activity=log_positive_activations(model, writer, epoch, all_test_images, batch_size)
+
         end_time = time.time()
         epoch_time = end_time - start_time
 
         testaccuracy = correct / total * 100
      
-        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
+        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} Act: {activity*100:.1f}% w_clip/entropy[bits]: ', end='')
 
         # update clipping scalars once per epoch        
         totalbits = 0
