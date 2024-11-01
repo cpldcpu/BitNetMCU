@@ -71,6 +71,31 @@
 
 # Parking lot
 
+## Use modified ReLU to enforce sparse activations
+
+Idea is to set to only pass the top 50% of positive activations.
+
+```python	
+class ReLUTopQ(nn.Module):
+    def __init__(self):
+        super(ReLUTopQ, self).__init__()
+        
+    def forward(self, x):
+        # Handle batched inputs by taking max over all dimensions except batch
+        max_x = torch.max(x, dim=1, keepdim=True)[0]
+        return 2 * F.relu(x - 0.5 * max_x)
+```
+Results:
+
+Normal ReLU:
+`Epoch [20/20], LTrain:0.072104 ATrain: 97.77% LTest:0.040317 ATest: 98.71% Time[s]: 19.01 Act: 39.4% w_clip/entropy[bits]: 0.468/2.65 0.387/3.49 0.333/3.58 0.562/3.80 `	
+ReLUTopQ
+`Epoch [20/20], LTrain:0.110103 ATrain: 96.56% LTest:0.061737 ATest: 98.15% Time[s]: 18.96 Act: 22.4% w_clip/entropy[bits]: 0.435/2.52 0.316/3.38 0.297/3.49 0.558/3.54 `
+
+-> Activiation density is roughly reduced by factor of two, but loss is significantly higher. This does not work.
+
+Pruning the bottom 50% of positive activations without rescaling does not work (no convergence).
+
 ## Optimize fc model
 
 - mixed quantization, use 2 bit for first layers to compress data
