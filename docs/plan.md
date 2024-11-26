@@ -24,7 +24,12 @@
 
 # Funnel
 
+## Activation functions other than ReLU
 
+Can activations functions help to improve network capacity and alleviate quantization noise?
+
+- ReLU2 -> better expressability ???
+- HardSwish -> Let negative activitations contribute to reduce noise?
 
 ## Mixture-of-Experts
 
