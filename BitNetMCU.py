@@ -6,16 +6,13 @@ import torch.nn.functional as F
 # @cpldcpu 2024-June-2
 
 class Activation(nn.Module):
-    def __init__(self, mode='hardswishquant'):
+    def __init__(self, mode='hardswish'):
         super(Activation, self).__init__()
         self.mode = mode
 
     def forward(self, x):
         if self.mode == 'hardswish':
             return x * F.relu6(x + 3) / 6
-        elif self.mode == 'hardswishquant':
-            x_int = (x*16).round().clamp_(-128, 127) / 16
-            return x_int * F.relu6(x_int + 3 ) / (6 )
         elif self.mode == 'GeLU':
             return F.gelu(x)
         elif self.mode == 'ReLU':
