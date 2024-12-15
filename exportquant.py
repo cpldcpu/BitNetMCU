@@ -38,7 +38,7 @@ def load_model(model_name, params):
         )
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
-    
+
 def export_to_hfile(quantized_model, filename, runname):
     """
     Exports the quantized model to an Ansi-C header file.
@@ -47,7 +47,7 @@ def export_to_hfile(quantized_model, filename, runname):
     filename (str): The name of the header file to which the quantized model will be exported.
 
     Note:
-    This method currently only supports binary quantization. 
+    This method currently only supports binary quantization.
     """
 
     if not quantized_model.quantized_model:
@@ -88,42 +88,42 @@ def export_to_hfile(quantized_model, filename, runname):
                     raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
                 print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
-                
+
                 data_type = np.uint32
-                
+
                 if quantization_type == 'Binary':
                     encoded_weights = np.where(weights == -1, 0, 1)
                     QuantID = 1
                 elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
                     encoded_weights = ((weights < 0).astype(data_type) << 1) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                     QuantID = 2
-                elif quantization_type == '4bitsym': 
+                elif quantization_type == '4bitsym':
                     encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                     QuantID = 4
-                elif quantization_type == '4bit': 
-                    encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
+                elif quantization_type == '4bit':
+                    encoded_weights = np.floor(weights).astype(data_type) & 15  # twos complement encoding
                     QuantID =  8 + 4
-                elif quantization_type == 'NF4': 
-                    levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+                elif quantization_type == 'NF4':
+                    levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
                                    0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0])
                     encoded_weights = np.argmin(np.abs(weights[:, :, np.newaxis] - levels), axis=2)
-                    QuantID = 32 + 4  
-                elif quantization_type == '8bit': 
-                    encoded_weights = np.floor(weights).astype(int) & 255  # twos complement encoding
+                    QuantID = 32 + 4
+                elif quantization_type == '8bit':
+                    encoded_weights = np.floor(weights).astype(data_type) & 255  # twos complement encoding
                     QuantID =  8 + 8
                 elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
-                    encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
+                    encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)
                     QuantID = 16 + 4
                 else:
                     print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
 
                 # pack bits into 32 bit words
-                weight_per_word = 32 // bpw 
+                weight_per_word = 32 // bpw
                 reshaped_array = encoded_weights.reshape(-1, weight_per_word)
-                
+
                 bit_positions = 32 - bpw - np.arange(weight_per_word, dtype=data_type) * bpw
                 packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(data_type)
-                
+
                 # print(f'weights: {weights.shape} {weights.flatten()[0:16]}')
                 # print(f'Encoded weights: {encoded_weights.shape} {encoded_weights.flatten()[0:16]}')
                 # print(f'Packed weights: {packed_weights.shape} {", ".join(map(lambda x: hex(x), packed_weights.flatten()[0:4]))}')
@@ -137,7 +137,7 @@ def export_to_hfile(quantized_model, filename, runname):
                 f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
                 f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
 
-                f.write(f'const uint32_t {layer}_weights[] = {{')         
+                f.write(f'const uint32_t {layer}_weights[] = {{')
                 for i,data in enumerate(packed_weights.flatten()):
                     if i&7 ==0:
                         f.write('\n\t')
@@ -177,7 +177,7 @@ def export_to_hfile(quantized_model, filename, runname):
                     if i % 16 == 0:
                         f.write('\n\t')
                     f.write(f'{data},')
-                f.write('\n};\n\n')                
+                f.write('\n};\n\n')
 
                 print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
 
@@ -195,7 +195,7 @@ def plot_test_images(test_loader):
         ax.axis('off')
 
     plt.tight_layout()
-    plt.show() 
+    plt.show()
 
 def print_stats(quantized_model):
     for layer_info in quantized_model.quantized_model:
@@ -209,10 +209,10 @@ def print_stats(quantized_model):
         print(f'Values: {values}')
         print(f'Percent: {(probabilities * 100)}')
 
-        number_of_codes = 2**layer_info['bpw'] 
+        number_of_codes = 2**layer_info['bpw']
         entropy = -np.sum(probabilities * np.log2(probabilities))
         print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
-  
+
 
 def plot_statistics(quantized_model):
     # Step 1: Extract the weights of the first layer
@@ -241,9 +241,9 @@ def plot_statistics(quantized_model):
     fig.colorbar(im, ax=axs[1], label='Mean')
 
     # Display the plot
-    plt.show(block=False)    
+    plt.show(block=False)
 
-        
+
 def plot_weights(quantized_model):
     # Step 1: Extract the weights of the first layer
     first_layer_weights = np.array(quantized_model.quantized_model[0]['quantized_weights'])
@@ -291,15 +291,15 @@ def plot_weight_histograms(quantized_model):
         sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
         ax.set_title(f'Layer {layer_index+1} Weight Distribution')
 
-    plt.tight_layout()  
+    plt.tight_layout()
     plt.show(block=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training script')
     parser.add_argument('--params', type=str, help='Name of the parameter file', default='trainingparameters.yaml')
-    
+
     args = parser.parse_args()
-    
+
     if args.params:
         paramname = args.params
     else:
@@ -329,9 +329,9 @@ if __name__ == '__main__':
 
     model = load_model(hyperparameters["model"], hyperparameters).to(device)
 
-    print('Loading model...')    
+    print('Loading model...')
     try:
-        model.load_state_dict(torch.load(f'modeldata/{runname}.pth'))
+        model.load_state_dict(torch.load(f'modeldata/{runname}.pth', weights_only=True))
     except FileNotFoundError:
         print(f"The file 'modeldata/{runname}.pth' does not exist.")
         exit()
@@ -342,7 +342,7 @@ if __name__ == '__main__':
     test_loss = []
     with torch.no_grad():
         for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)        
+            images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
@@ -395,12 +395,12 @@ if __name__ == '__main__':
     # Calculate and print the overall fraction of correct predictions
     overall_correct_predictions = total_correct_predictions / total_samples
 
-    print('Accuracy/Test of quantized model:', overall_correct_predictions * 100, '%') 
+    print('Accuracy/Test of quantized model:', overall_correct_predictions * 100, '%')
 
     print("Exporting model to header file")
     # export the quantized model to a header file
     # export_to_hfile(quantized_model, f'{exportfolder}/{runname}.h')
     export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname)
-    
+
     if showplots:
         plt.show()
