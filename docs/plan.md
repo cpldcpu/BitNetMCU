@@ -102,6 +102,81 @@ F.relu(x) + NF4  LTrain:0.082073 ATrain: 97.45% LTest:0.047435 ATest: 98.50% Tim
 
 Can we swap to relu at inference time? Or is there also a significant inference time benefit? -> no we cant. switching activation drops accuracy, but healing is quick.
 
+## Residual connections / Resnet
+
+- Can a residual connection help to "scale down" noise, so that quantization noise is less significant?
+
+- Helps to reduce training loss slightly for 4 bit, but only if scale value is learned as well. Same for 2 bit.
+
+experiments on 64/64/64/20 epochs
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = self.ReLU(self.fc2(x))
+        x = self.ReLU(self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.070248 ATrain: 97.81% LTest:0.047278 ATest: 98.52% Time[s]: 13.93 Act: 39.5% w_clip/entropy[bits]: 0.474/2.63 0.412/3.39 0.330/3.60 0.657/3.64 
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = self.ReLU(x+self.fc2(x))
+        x = self.ReLU(x+self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.076385 ATrain: 97.59% LTest:0.040175 ATest: 98.72% Time[s]: 13.85 Act: 42.0% w_clip/entropy[bits]: 0.465/2.57 0.466/3.43 0.475/3.39 0.695/3.72 
+*2bitsym*
+Epoch [20/20], LTrain:0.110816 ATrain: 96.52% LTest:0.060259 ATest: 98.05% Time[s]: 14.13 Act: 41.0% w_clip/entropy[bits]: 0.379/1.51 0.376/1.85 0.293/1.91 0.597/1.93 
+
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = x + self.ReLU(self.fc2(x))
+        x = x + self.ReLU(self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+Epoch [20/20], LTrain:0.079785 ATrain: 97.52% LTest:0.047587 ATest: 98.59% Time[s]: 13.16 Act: 33.0% w_clip/entropy[bits]: 0.451/2.64 0.502/3.41 0.492/3.51 0.791/3.76 
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = x * self.scale1 + self.ReLU(self.fc2(x))
+        x = x * self.scale2 + self.ReLU(self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.068703 ATrain: 97.87% LTest:0.041398 ATest: 98.59% Time[s]: 13.85 Act: 31.9% w_clip/entropy[bits]: 0.505/2.59 0.410/3.46 0.415/3.40 0.651/3.74
+*2bitsym*
+Epoch [20/20], LTrain:0.107123 ATrain: 96.55% LTest:0.060191 ATest: 97.92% Time[s]: 13.86 Act: 34.0% w_clip/entropy[bits]: 0.384/1.51 0.383/1.86 0.341/1.83 0.565/1.98 
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x =  self.ReLU(x * self.scale1 + self.fc2(x))
+        x =  self.ReLU(x * self.scale2 + self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.071519 ATrain: 97.79% LTest:0.042721 ATest: 98.65% Time[s]: 14.60 Act: 40.3% w_clip/entropy[bits]: 0.451/2.72 0.428/3.40 0.388/3.47 0.636/3.76 
+
+*2bitsym*
+Epoch [20/20], LTrain:0.106741 ATrain: 96.64% LTest:0.065592 ATest: 97.86% Time[s]: 14.45 Act: 43.3% w_clip/entropy[bits]: 0.375/1.53 0.376/1.85 0.346/1.85 0.562/1.97 
+
 ## Mixture-of-Experts
 
 - Use routing mechanism to reduce the number of depth-wise conv2d to extract features
