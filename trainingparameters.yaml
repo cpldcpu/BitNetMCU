@@ -4,7 +4,7 @@
 model: 'FCMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model as defined in models.py.
 
 # Quantization settings
-QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4' 
+QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4'
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
 WScale: 'PerTensor' # 'PerTensor', 'PerOutput'
 
@@ -20,7 +20,7 @@ scheduler: "Cosine" # "StepLR", "Cosine"
 learning_rate: 0.001
 lr_decay: 0.1     # lr_decay and step size are not used with cosine scheduler
 step_size: 10
-# halve_lr_epoch: 30  # Epoch at which to halve the learning rate 
+# halve_lr_epoch: 30  # Epoch at which to halve the learning rate
 
 # Data augmentation
 augmentation: True
@@ -33,4 +33,4 @@ network_width2: 64
 network_width3: 64
 
 # name
-runtag: "octav_" # runtag is prefix for runname
+runtag: "octav" # runtag is prefix for runname
