@@ -106,6 +106,16 @@ Can we swap to relu at inference time? Or is there also a significant inference 
 
 - Use routing mechanism to reduce the number of depth-wise conv2d to extract features
 
+## Review clipping algorithm
+
+- Re-Investigate whether OCTAV is really the best way to adjust clipping. The test accuracy seems to have degraded after introduction of OCTAV. 
+- Potential approaches
+  - Prioritize quantization noise over clipping noise as the network can
+    adjust to clipping noise easier than to quantization noise. (Fewer weights involved)
+  - Copilot suggestion (Why?): Use a fixed clipping value for the first layers and adjust the clipping value for the last layers. This would allow to use a higher clipping value for the first layers to extract more features and a lower clipping value for the last layers to reduce noise.
+  - train clipping value as a parameter
+  - decrease clipping value over time
+  
 
 ## Refactor models.py
 
@@ -141,6 +151,18 @@ Can we swap to relu at inference time? Or is there also a significant inference 
 
 
 # Parking lot
+
+## Reorder tensors for better compressabiliy
+
+- reorder layer tensors in a way where weights are more correlated while they are
+  streamed in for MAC.
+
+*Results*
+- Reordering according to cosine similarity and L2 distance implemented.
+- Does not seem to have sufficient effect on weight correlation
+- Unforeseen issue: Delta encoding requires an additional bit, so entropy
+is not reduced.
+
 
 ## Use modified ReLU to enforce sparse activations
 
