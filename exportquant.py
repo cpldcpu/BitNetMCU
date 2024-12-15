@@ -11,6 +11,8 @@ import argparse
 import yaml
 import seaborn as sns
 import importlib
+from scipy.cluster.hierarchy import linkage, dendrogram, leaves_list
+import copy  # Add this import at the top with other imports
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
@@ -38,7 +40,7 @@ def load_model(model_name, params):
         )
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
-    
+
 def export_to_hfile(quantized_model, filename, runname):
     """
     Exports the quantized model to an Ansi-C header file.
@@ -47,7 +49,7 @@ def export_to_hfile(quantized_model, filename, runname):
     filename (str): The name of the header file to which the quantized model will be exported.
 
     Note:
-    This method currently only supports binary quantization. 
+    This method currently only supports binary quantization.
     """
 
     if not quantized_model.quantized_model:
@@ -88,42 +90,42 @@ def export_to_hfile(quantized_model, filename, runname):
                     raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
                 print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
-                
+
                 data_type = np.uint32
-                
+
                 if quantization_type == 'Binary':
                     encoded_weights = np.where(weights == -1, 0, 1)
                     QuantID = 1
                 elif quantization_type == '2bitsym': # encoding -1.5 -> 11, -0.5 -> 10, 0.5 -> 00, 1.5 -> 01 (one complement with offset)
                     encoded_weights = ((weights < 0).astype(data_type) << 1) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                     QuantID = 2
-                elif quantization_type == '4bitsym': 
+                elif quantization_type == '4bitsym':
                     encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.abs(weights))).astype(data_type)  # use bitwise operations to encode the weights
                     QuantID = 4
-                elif quantization_type == '4bit': 
-                    encoded_weights = np.floor(weights).astype(int) & 15  # twos complement encoding
+                elif quantization_type == '4bit':
+                    encoded_weights = np.floor(weights).astype(data_type) & 15  # twos complement encoding
                     QuantID =  8 + 4
-                elif quantization_type == 'NF4': 
-                    levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+                elif quantization_type == 'NF4':
+                    levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
                                    0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0])
                     encoded_weights = np.argmin(np.abs(weights[:, :, np.newaxis] - levels), axis=2)
-                    QuantID = 32 + 4  
-                elif quantization_type == '8bit': 
-                    encoded_weights = np.floor(weights).astype(int) & 255  # twos complement encoding
+                    QuantID = 32 + 4
+                elif quantization_type == '8bit':
+                    encoded_weights = np.floor(weights).astype(data_type) & 255  # twos complement encoding
                     QuantID =  8 + 8
                 elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
-                    encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)  
+                    encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)
                     QuantID = 16 + 4
                 else:
                     print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
 
                 # pack bits into 32 bit words
-                weight_per_word = 32 // bpw 
+                weight_per_word = 32 // bpw
                 reshaped_array = encoded_weights.reshape(-1, weight_per_word)
-                
+
                 bit_positions = 32 - bpw - np.arange(weight_per_word, dtype=data_type) * bpw
                 packed_weights = np.bitwise_or.reduce(reshaped_array << bit_positions, axis=1).view(data_type)
-                
+
                 # print(f'weights: {weights.shape} {weights.flatten()[0:16]}')
                 # print(f'Encoded weights: {encoded_weights.shape} {encoded_weights.flatten()[0:16]}')
                 # print(f'Packed weights: {packed_weights.shape} {", ".join(map(lambda x: hex(x), packed_weights.flatten()[0:4]))}')
@@ -137,7 +139,7 @@ def export_to_hfile(quantized_model, filename, runname):
                 f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
                 f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
 
-                f.write(f'const uint32_t {layer}_weights[] = {{')         
+                f.write(f'const uint32_t {layer}_weights[] = {{')
                 for i,data in enumerate(packed_weights.flatten()):
                     if i&7 ==0:
                         f.write('\n\t')
@@ -177,7 +179,7 @@ def export_to_hfile(quantized_model, filename, runname):
                     if i % 16 == 0:
                         f.write('\n\t')
                     f.write(f'{data},')
-                f.write('\n};\n\n')                
+                f.write('\n};\n\n')
 
                 print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
 
@@ -195,7 +197,7 @@ def plot_test_images(test_loader):
         ax.axis('off')
 
     plt.tight_layout()
-    plt.show() 
+    plt.show()
 
 def print_stats(quantized_model):
     for layer_info in quantized_model.quantized_model:
@@ -209,10 +211,10 @@ def print_stats(quantized_model):
         print(f'Values: {values}')
         print(f'Percent: {(probabilities * 100)}')
 
-        number_of_codes = 2**layer_info['bpw'] 
+        number_of_codes = 2**layer_info['bpw']
         entropy = -np.sum(probabilities * np.log2(probabilities))
         print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
-  
+
 
 def plot_statistics(quantized_model):
     # Step 1: Extract the weights of the first layer
@@ -241,9 +243,9 @@ def plot_statistics(quantized_model):
     fig.colorbar(im, ax=axs[1], label='Mean')
 
     # Display the plot
-    plt.show(block=False)    
+    plt.show(block=False)
 
-        
+
 def plot_weights(quantized_model):
     # Step 1: Extract the weights of the first layer
     first_layer_weights = np.array(quantized_model.quantized_model[0]['quantized_weights'])
@@ -291,15 +293,249 @@ def plot_weight_histograms(quantized_model):
         sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
         ax.set_title(f'Layer {layer_index+1} Weight Distribution')
 
-    plt.tight_layout()  
+    plt.tight_layout()
     plt.show(block=False)
+
+def reorder_by_similarity(similarity_matrix):
+    """
+    Reorders rows/columns of similarity matrix to group similar features together.
+    Returns the reordered matrix and the ordering indices.
+    """
+    # Perform hierarchical clustering
+    linkage_matrix = linkage(similarity_matrix, method='complete')
+    # Get the order of leaves from the dendrogram
+    order = leaves_list(linkage_matrix)
+    # Reorder the similarity matrix
+    reordered_matrix = similarity_matrix[order][:, order]
+    return reordered_matrix, order
+
+def calculate_similarity_matrix(vectors, method='prefix_avg', n_prefix=2):
+    """
+    Calculate similarity matrix using specified method.
+    methods: 'cosine', 'l2', or 'prefix_avg'
+    n_prefix: number of leading weights to use for prefix_avg method
+    """
+    if method == 'cosine':
+        # Normalize vectors and compute dot product
+        norm = np.linalg.norm(vectors, axis=1).reshape(-1, 1)
+        normalized_vectors = vectors / norm
+        similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
+    elif method == 'l2':
+        # Compute pairwise L2 distances and convert to similarity
+        n_vectors = vectors.shape[0]
+        similarity_matrix = np.zeros((n_vectors, n_vectors))
+        for i in range(n_vectors):
+            for j in range(n_vectors):
+                l2_dist = np.linalg.norm(vectors[i] - vectors[j])
+                # Convert distance to similarity (closer = more similar)
+                similarity_matrix[i,j] = 1.0 / (1.0 + l2_dist)
+    elif method == 'prefix_avg':
+        # Calculate average of first n_prefix weights for each vector
+        prefix_avgs = np.mean(vectors[:, :n_prefix], axis=1)
+        # Create similarity matrix based on difference of averages
+        n_vectors = vectors.shape[0]
+        similarity_matrix = np.zeros((n_vectors, n_vectors))
+        for i in range(n_vectors):
+            for j in range(n_vectors):
+                diff = abs(prefix_avgs[i] - prefix_avgs[j])
+                similarity_matrix[i,j] = 1.0 / (1.0 + diff)
+    else:
+        raise ValueError(f"Unknown similarity method: {method}")
+
+    return similarity_matrix
+
+def plot_weight_similarities(quantized_model, method='cosine'):
+    """
+    Calculate and plot the similarities between weight vectors for each layer.
+    """
+    for layer_idx, layer_info in enumerate(quantized_model.quantized_model):
+        weights = np.array(layer_info['quantized_weights'])
+
+        # Reshape weights
+        if layer_info['layer_type'] == 'BitLinear':
+            weights_out = weights
+            weights_in = weights.T
+        elif layer_info['layer_type'] == 'BitConv2d':
+            shape = weights.shape
+            weights_out = weights.reshape(shape[0], -1)
+            weights_in = weights.reshape(shape[0], -1).T
+        else:
+            continue
+
+        # Create figure with subplots
+        fig, ((ax1, ax2)) = plt.subplots(1, 2, figsize=(16, 8))
+
+        # Calculate similarities
+        similarity_matrix_out = calculate_similarity_matrix(weights_out, method)
+        similarity_matrix_in = calculate_similarity_matrix(weights_in, method)
+
+        # Plot similarity matrices
+        vmin = -1 if method == 'cosine' else 0
+        vmax = 1
+        im1 = ax1.imshow(similarity_matrix_out, cmap='RdBu', vmin=vmin, vmax=vmax)
+        plt.colorbar(im1, ax=ax1, label=f'{method.capitalize()} Similarity')
+        ax1.set_title(f'Output Neuron Similarities')
+
+        im2 = ax2.imshow(similarity_matrix_in, cmap='RdBu', vmin=vmin, vmax=vmax)
+        plt.colorbar(im2, ax=ax2, label=f'{method.capitalize()} Similarity')
+        ax2.set_title(f'Input Feature Similarities')
+
+        plt.suptitle(f'Layer {layer_idx + 1} - {layer_info["layer_type"]} ({method})')
+        plt.tight_layout()
+        plt.show(block=False)
+
+# Update calculate_input_similarities to use the new function
+def calculate_input_similarities(weights, method='cosine'):
+    """Calculate input feature similarities for a layer."""
+    if len(weights.shape) == 4:  # Conv2d layer
+        weights_in = weights.reshape(weights.shape[0], -1).T
+    else:  # Linear layer
+        weights_in = weights.T
+
+    return calculate_similarity_matrix(weights_in, method)
+
+def reorder_model_weights(model, method='l2'):
+    """
+    Reorder weights in each layer based on input similarities of the next layer.
+    Returns a new model with reordered weights.
+    """
+
+    # Create a deep copy of the model
+    new_model = copy.deepcopy(model)
+
+    # Get all model parameters as numpy arrays
+    params = []
+    for name, param in new_model.named_parameters():
+        if 'weight' in name:
+            params.append(param.detach().cpu().numpy())
+
+    # Calculate reordering for each layer except the last
+    for i in range(len(params) - 1):
+        # Calculate input similarities of the next layer using specified method
+        next_layer_similarities = calculate_input_similarities(params[i + 1], method)
+
+        # Get ordering from clustering
+        _, order = reorder_by_similarity(next_layer_similarities)
+
+        print(f"Layer {i} reordering indices: {order}")
+
+        # Reorder current layer's output dimension
+        if len(params[i].shape) == 4:  # Conv2d layer
+            params[i] = params[i][order, :, :, :]
+        else:  # Linear layer
+            params[i] = params[i][order, :]
+
+        # Reorder next layer's input dimension
+        if len(params[i + 1].shape) == 4:  # Conv2d layer
+            params[i + 1] = params[i + 1][:, order, :, :]
+        else:  # Linear layer
+            params[i + 1] = params[i + 1][:, order]
+
+    # Update the model with reordered parameters
+    idx = 0
+    for name, param in new_model.named_parameters():
+        if 'weight' in name:
+            param.data = torch.from_numpy(params[idx]).to(device)
+            idx += 1
+
+    return new_model
+
+def evaluate_model(model, test_loader, device, model_name=""):
+    """Helper function to evaluate a model and print accuracy"""
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = correct / total * 100
+    print(f'Accuracy/Test of {model_name}: {accuracy:.2f}%')
+    return accuracy
+
+def calculate_entropy(data):
+    """Calculate entropy of a data array"""
+    values, counts = np.unique(data, return_counts=True)
+    probabilities = counts / np.sum(counts)
+    entropy = -np.sum(probabilities * np.log2(probabilities))
+    return entropy, values, probabilities
+
+def delta_encode_model(quantized_model):
+    """
+    Perform delta encoding on each output neuron's weight vector.
+    Returns a new model with delta-encoded weights and entropy statistics.
+    """
+    delta_model = copy.deepcopy(quantized_model)
+
+    for layer_info in delta_model.quantized_model:
+        weights = np.array(layer_info['quantized_weights'])
+        original_shape = weights.shape
+
+        if layer_info['layer_type'] == 'BitLinear':
+            # Each row is one output neuron's weights
+            weights_2d = weights
+        elif layer_info['layer_type'] == 'BitConv2d':
+            # Reshape to (out_channels, -1)
+            weights_2d = weights.reshape(weights.shape[0], -1)
+        else:
+            continue
+
+        # Calculate original entropy
+        orig_entropy, orig_values, orig_probs = calculate_entropy(weights)
+
+        # Delta encode each output neuron's weights
+        delta_weights = np.zeros_like(weights_2d)
+        for i in range(len(weights_2d)):
+            # First value is delta from 0
+            delta_weights[i, 0] = weights_2d[i, 0]
+            # Subsequent values are deltas from previous values
+            delta_weights[i, 1:] = np.diff(weights_2d[i])
+
+        # Calculate entropy after delta encoding
+        delta_entropy, delta_values, delta_probs = calculate_entropy(delta_weights)
+
+        # Print statistics
+        print(f"\nLayer {layer_info['layer_order']} - {layer_info['layer_type']}")
+        print(f"Original entropy: {orig_entropy:.2f} bits")
+        print(f"Original unique values: {len(orig_values)}")
+        print(f"Delta entropy: {delta_entropy:.2f} bits")
+        print(f"Delta unique values: {len(delta_values)}")
+        print(f"Entropy reduction: {((orig_entropy - delta_entropy) / orig_entropy * 100):.1f}%")
+
+        # Plot histograms side by side
+        if showplots:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+            ax1.hist(weights.flatten(), bins='auto', density=True)
+            ax1.set_title(f'Original Distribution\nEntropy: {orig_entropy:.2f} bits')
+            ax1.set_yscale('log')
+
+            ax2.hist(delta_weights.flatten(), bins='auto', density=True)
+            ax2.set_title(f'Delta Distribution\nEntropy: {delta_entropy:.2f} bits')
+            ax2.set_yscale('log')
+
+            plt.suptitle(f'Layer {layer_info["layer_order"]} Weight Distributions')
+            plt.tight_layout()
+            plt.show(block=False)
+
+        # Store delta encoded weights back in original shape
+        if layer_info['layer_type'] == 'BitConv2d':
+            delta_weights = delta_weights.reshape(original_shape)
+
+        layer_info['original_weights'] = weights
+        layer_info['quantized_weights'] = delta_weights
+        layer_info['is_delta_encoded'] = True
+
+    return delta_model
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training script')
     parser.add_argument('--params', type=str, help='Name of the parameter file', default='trainingparameters.yaml')
-    
+
     args = parser.parse_args()
-    
+
     if args.params:
         paramname = args.params
     else:
@@ -329,35 +565,56 @@ if __name__ == '__main__':
 
     model = load_model(hyperparameters["model"], hyperparameters).to(device)
 
-    print('Loading model...')    
+    print('Loading model...')
     try:
-        model.load_state_dict(torch.load(f'modeldata/{runname}.pth'))
+        model.load_state_dict(torch.load(f'modeldata/{runname}.pth', weights_only=True))
     except FileNotFoundError:
         print(f"The file 'modeldata/{runname}.pth' does not exist.")
         exit()
 
-    print('Inference using the original model...')
-    correct = 0
-    total = 0
-    test_loss = []
-    with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)        
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    testaccuracy = correct / total * 100
-    print(f'Accuracy/Test of trained model: {testaccuracy} %')
+    # Save original model accuracy
+    print('\nEvaluating original model...')
+    original_accuracy = evaluate_model(model, test_loader, device, "original model")
 
-    print('Quantizing model...')
-    # Quantize the model
-    quantized_model = QuantizedModel(model)
+    # Reorder weights and evaluate
+    print('\nReordering model weights...')
+    reordered_model = reorder_model_weights(model, method='cosine')
+    reordered_accuracy = evaluate_model(reordered_model, test_loader, device, "reordered model")
+
+    # Print comparison
+    print('\nAccuracy Comparison:')
+    print(f'Original model:  {original_accuracy:.2f}%')
+    print(f'Reordered model: {reordered_accuracy:.2f}%')
+    print(f'Difference:      {reordered_accuracy - original_accuracy:.2f}%')
+
+    print('\nQuantizing reordered model...')
+    quantized_model = QuantizedModel(reordered_model)
+    # quantized_model = QuantizedModel(model)
+
+    # Add delta encoding step
+    # print('\nPerforming delta encoding...')
+    # delta_encoded_model = delta_encode_model(quantized_model)
+
+    # Print statistics for both models
+    print('\nOriginal quantized model statistics:')
+    print_stats(quantized_model)
+    # print('\nDelta encoded model statistics:')
+    # print_stats(delta_encoded_model)
+
+    # Continue with existing code using delta_encoded_model instead of quantized_model
+    # quantized_model = delta_encoded_model
 
     # Print statistics
-    print_stats(quantized_model)
+    # print_stats(quantized_model)
 
     if showplots:
+        # Plot both similarity metrics
+        print("\nPlotting cosine similarities...")
+        plot_weight_similarities(quantized_model, 'cosine')
+        print("\nPlotting L2-based similarities...")
+        # plot_weight_similarities(quantized_model, 'l2')
+        # print("\nPlotting prefix average similarities...")
+        # plot_weight_similarities(quantized_model, 'prefix_avg')
         # plot_weights(quantized_model)
         # plot_statistics(quantized_model)
         plot_weight_histograms(quantized_model)
@@ -395,12 +652,12 @@ if __name__ == '__main__':
     # Calculate and print the overall fraction of correct predictions
     overall_correct_predictions = total_correct_predictions / total_samples
 
-    print('Accuracy/Test of quantized model:', overall_correct_predictions * 100, '%') 
+    print('Accuracy/Test of quantized model:', overall_correct_predictions * 100, '%')
 
     print("Exporting model to header file")
     # export the quantized model to a header file
     # export_to_hfile(quantized_model, f'{exportfolder}/{runname}.h')
     export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname)
-    
+
     if showplots:
         plt.show()
