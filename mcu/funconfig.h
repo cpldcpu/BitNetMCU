@@ -5,8 +5,8 @@
 #define FUNCONF_USE_DEBUGPRINTF 1
 #define FUNCONF_DEBUGPRINTF_TIMEOUT (1<<31) // Wait for a very very long time.
 
-#define FUNCONF_USE_HSE 1  			// external crystal on PA1 PA2
-#define FUNCONF_USE_HSI 0    		// internal 24MHz clock oscillator
+#define FUNCONF_USE_HSE 0  			// external crystal on PA1 PA2
+#define FUNCONF_USE_HSI 1    		// internal 24MHz clock oscillator
 #define FUNCONF_USE_PLL 1			// use PLL x2
 #define FUNCONF_HSE_BYPASS 0 		// bypass the HSE when using an external clock source
 									// requires enabled HSE
