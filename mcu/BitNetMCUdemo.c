@@ -51,7 +51,6 @@ void BitMnistInference(const int8_t *input, const uint8_t label, const uint8_t s
 int main()
 {
 	SystemInit();
-//	SysTick->CTLR = 5;  // Use HCLK as time base -> configured in funconfig.h
 
 	while(1)
 	{

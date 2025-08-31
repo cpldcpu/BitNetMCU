@@ -111,8 +111,9 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 2;
                 }
             }
-        // Multiplier-less inference for RV32EC
-#if defined(__riscv) && !defined(__riscv_mul)
+        // Multiplier-less inference for CH32V003
+// #if defined(__riscv) && !defined(__riscv_mul)
+#if defined(CH32V003) 
         } else if (bits_per_weight == 4 ) {
             for (uint32_t k = 0; k < n_input; k+=8) {
                 uint32_t weightChunk = *weightidx++;
