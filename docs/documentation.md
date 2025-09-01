@@ -1,7 +1,6 @@
 # BitNetMCU
 
-**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
-- [BitNetMCU](#bitnetmcu)
+**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**- [BitNetMCU](#bitnetmcu)
 - [Introduction and Motivation](#introduction-and-motivation)
   - [Background](#background)
 - [Implementation of training code](#implementation-of-training-code)
@@ -29,6 +28,8 @@
   - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
   - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
   - [Aug 3rd, 2024: Stepped Learning Rate Schedule](#aug-3rd-2024-stepped-learning-rate-schedule)
+  - [Aug 31st, 2025: Porting to CH32V002 and newest version of CH32fun](#aug-31st-2025-porting-to-ch32v002-and-newest-version-of-ch32fun)
+    - [Execution Time Comparison between CH32V002 and CH3V003](#execution-time-comparison-between-ch32v002-and-ch3v003)
 - [References](#references)
 
 
@@ -381,24 +382,17 @@ Again, the compiled code of the inner loop below. The compiler decided to unroll
      1d2:	00060383          	lb	    t2,0(a2)
      1d6:	00075463          	bgez	a4,1de <processfclayer+0x2e>
      1da:	407003b3          	neg	    t2,t2
-<processfclayer+0x2e>     
-     1de:	00371413          	slli	s0,a4,0x3
-     1e2:	979e               	add	    a5,a5,t2
-     1e4:	00045563          	bgez	s0,1ee <processfclayer+0x3e>
-     1e8:	00139413          	slli	s0,t2,0x1
-     1ec:	97a2               	add	    a5,a5,s0
-<processfclayer+0x3e>    
-     1ee:	00271413          	slli	s0,a4,0x2
-     1f2:	00045563          	bgez	s0,1fc <processfclayer+0x4c>
-     1f6:	00239413          	slli	s0,t2,0x2
-     1fa:	97a2               	add	    a5,a5,s0
-<processfclayer+0x4c>     
-     1fc:	00171413          	slli	s0,a4,0x1
-     200:	00045463          	bgez	s0,208 <processfclayer+0x58>
-     204:	038e               	slli	t2,t2,0x3
-     206:	979e               	add	    a5,a5,t2
-<processfclayer+0x58>     
-     208:	00471413          	slli	s0,a4,0x4
+positive:
+
+    	01cf5a93          	srli	s5,t5,0x1c
+    	007afa93          	andi	s5,s5,7
+    	015898b3          	sll	    a7,a7,s5
+    	9846               	add	    a6,a6,a7
+
+    	0e85               	addi	t4,t4,1
+    	0f12               	slli	t5,t5,0x4
+
+	fdfe9fe3          	bne	    t4,t6,20000158 <loop>
 ```
 
 In total 17 instructions are required per weight, with no additional loop overhead. 
@@ -487,7 +481,7 @@ Percent: [ 0.15625  0.78125  4.0625  12.96875 15.3125  15.625   14.6875  11.25 9
 Entropy: 3.15 bits. Code capacity used: 78.82800031261552 %
 Total number of bits: 100864 (12.3125 kbytes)
 inference of quantized model
-Accuracy/Test of quantized model: 99.00999999999999 %
+Accuracy of quantized model: 99.00999999999999 %
 ```
 
 The total size of the model is 12.3 kilobytes. The tool also performs inference on both the original PyTorch model and a quantized version that emulates the ShiftNorm operation. Interestingly, the accuracy of the quantized model is 99.01%, which is slightly better than the original model. The model data is written to a header file, which is subsequently included in the C code.
@@ -586,8 +580,8 @@ positive:
 	015898b3          	sll	    a7,a7,s5
 	9846               	add	    a6,a6,a7
 
-	0e85               	addi	t4,t4,1
-	0f12               	slli	t5,t5,0x4
+		0e85               	addi	t4,t4,1
+		0f12               	slli	t5,t5,0x4
 
 	fdfe9fe3          	bne	    t4,t6,20000158 <loop>
 ```
@@ -775,7 +769,66 @@ The plot below shows different learning rate schedules with and without step red
 
 The halving leads to an immediate improvement in training loss; however the benefit compared to the runs without halving is lost at the end of the training run. Interestingly, the halving improves test loss. This suggests that the halving leads to better regularization. The benefits are rather small, though, and may have more effect in datasets where the model capacity is more limiting.
 
+## Aug 31st, 2025: Porting to CH32V002 and newest version of CH32fun
+
+I ported the example code from the CH32V003 to the CH32V002 and updated to the latest version of the CH32fun environment. It can now be compiled for any CH32V00X MCU (and also others from that series).
+
+Compared to the CH32V003, the CH32V002 brings some minor changes, both good and bad.
+- The RISC-V core was updated to a RV32EmC instruction set architecture, which includes a multiplication instruction.
+- The Flash memory now requires 2 waitstates instead of 1 waitstate at 48MHz, reducing effective code execution speed from Flash.
+
+### Execution Time Comparison between CH32V002 and CH3V003
+
+I compared the execution times of both MCUs in all possible configurations, with code execution from SRAM or Flash and for code using the multiplication instructions instead of bitwise adding. This is for the 12kb model with 4bit symmetric weight encoding. (Avg cycles = mean of 3 samples; Time = cycles / 48e6.)
+
+| MCU / Mode | Memory | Multiplier | Avg cycles | Relative |
+|------------|--------|------------|-----------:|---------:|
+| CH32V003   | SRAM   | no         |   653,965  | 1.00x |
+| CH32V002   | SRAM   | no         |   677,362  | 1.04x |
+| CH32V002   | SRAM   | yes        |   508,605  | 0.78x |
+| CH32V003   | Flash  | no         |   903,209  | 1.38x |
+| CH32V002   | Flash  | no         | 1,343,729  | 2.06x |
+| CH32V002   | Flash  | yes        | 1,015,672  | 1.55x |
+
+We see that even for execution from SRAM, the V002 is around 3.6% slower than the V003. This
+is due to added waitstates in the parts of the code that were executed from Flash. However, when we use the multiplier, things change and we get a nice 22% speedup vs. V003. 
+
+Code execution from flash degrades performance significantly for both V003 and V002. Due to the added waitstates, the V002 takes 48% longer, which is roughly proportional to the increase in memory access timing. The improvements from the fast multiplication can barely compensate for this. 
+
+Note that the slowdown for execution from flash depends on the fraction of 16 bit instructions in the code, as 32 bit fetches may partially hide latency. Note that the V002 has 4kb SRAM vs. 3kb in the V003 which allows for more code to be executed from SRAM.
+
 # References
+- [BitNetMCU](#bitnetmcu)
+- [Introduction and Motivation](#introduction-and-motivation)
+  - [Background](#background)
+- [Implementation of training code](#implementation-of-training-code)
+- [Model Optimization](#model-optimization)
+  - [Quantization Aware Training vs Post-Quantization](#quantization-aware-training-vs-post-quantization)
+    - [Model Capacity vs Quantization scaling](#model-capacity-vs-quantization-scaling)
+    - [Test Accuracy and Loss](#test-accuracy-and-loss)
+  - [Optimizing training parameters](#optimizing-training-parameters)
+    - [Learning rate and number of epochs](#learning-rate-and-number-of-epochs)
+    - [Data Augmentation](#data-augmentation)
+- [Architecture of the Inference Engine](#architecture-of-the-inference-engine)
+  - [Implementation in Ansi-C](#implementation-in-ansi-c)
+    - [fc-layer](#fc-layer)
+    - [ShiftNorm / ReLU block](#shiftnorm--relu-block)
+- [Putting it all together](#putting-it-all-together)
+  - [Model Exporting](#model-exporting)
+  - [Verification of the Ansi-C Inference Engine vs. Python](#verification-of-the-ansi-c-inference-engine-vs-python)
+  - [Implementation on the CH32V003](#implementation-on-the-ch32v003)
+- [Summary and Conclusions](#summary-and-conclusions)
+- [Updates](#updates)
+  - [May 20, 2024: Additional quantization schemes](#may-20-2024-additional-quantization-schemes)
+    - [FP1.3.0 Quantization](#fp130-quantization)
+    - [4-bit ones complement quantization](#4-bit-ones-complement-quantization)
+  - [May 20, 2024: Quantization scaling](#may-20-2024-quantization-scaling)
+  - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
+  - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
+  - [Aug 3rd, 2024: Stepped Learning Rate Schedule](#aug-3rd-2024-stepped-learning-rate-schedule)
+  - [Aug 31st, 2025: Porting to CH32V002 and newest version of CH32fun](#aug-31st-2025-porting-to-ch32v002-and-newest-version-of-ch32fun)
+    - [Execution Time Comparison between CH32V002 and CH3V003](#execution-time-comparison-between-ch32v002-and-ch3v003)
+- [References](#references)
 
 [^1]: S. Ma et al *The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits* ([arXiv:2402.17764](https://arxiv.org/abs/2402.17764)) and [discussion here](https://huggingface.co/papers/2402.17764) 
 
