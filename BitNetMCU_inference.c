@@ -186,6 +186,8 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
     // printf("-X-\n");
 }
 
+#ifndef MODEL_FCMNIST
+
 /**
  * @brief fused 3x3 conv2d and ReLU activation function
  * convo
@@ -297,3 +299,5 @@ int32_t *processmaxpool22(int32_t *activations, uint32_t xy_input, int32_t *outp
     }
     return output;
 }
+
+#endif
