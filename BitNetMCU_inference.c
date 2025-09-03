@@ -215,7 +215,7 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
 int32_t* processconv33ReLU(int32_t *activations, const int8_t *weightsin, uint32_t xy_input, uint32_t  n_shift , int32_t *output) {
 
     // Create SRAM copy of the weights for speed up
-    uint8_t weights[9];
+    int8_t weights[9];
 
     for (uint32_t i = 0; i < 9; i++) {
         weights[i] = weightsin[i];
