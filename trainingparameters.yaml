@@ -15,7 +15,7 @@ maxw_quantscale: 0.25  # Used only for clipping_algo='prop'. Determines the rela
 
 # Learning parameters
 num_epochs: 60  # 5, 20, 80
-batch_size: 128
+batch_size: 64
 scheduler: "Cosine" # "StepLR", "Cosine", "CosineWarmRestarts"
 learning_rate: 0.001
 
@@ -27,7 +27,7 @@ learning_rate: 0.001
 # lr_decay: 0.1     # lr_decay and step size for StepLR
 # step_size: 10
 
-halve_lr_epoch: 30  # Epoch at which to halve the learning rate - to be used with Cosine schedule 
+# halve_lr_epoch: 30  # Epoch at which to halve the learning rate - to be used with Cosine schedule 
 
 # Data augmentation
 augmentation: True

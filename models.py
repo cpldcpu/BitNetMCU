@@ -115,8 +115,8 @@ class CNNMNIST(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2),           
 
             nn.Flatten(),
-            # MaskingLayer(256+128),   # learnable masking layer for auto-pruning
-            BitLinear(256 , network_width1,QuantType='2bitsym',NormType=NormType, WScale=WScale),
+            # MaskingLayer(96*4),   # learnable masking layer for auto-pruning
+            BitLinear(64*4 , network_width1,QuantType='2bitsym',NormType=NormType, WScale=WScale),
             nn.ReLU(),
             BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale),
             nn.ReLU()
