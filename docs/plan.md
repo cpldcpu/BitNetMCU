@@ -24,11 +24,173 @@
 
 # Funnel
 
+## Activation functions other than ReLU
+
+Can activations functions help to improve network capacity and alleviate quantization noise?
+
+- ReLU2 -> better expressability ???
+- HardSwish -> Let negative activitations contribute to reduce noise?
+
+width48_48_48_epochs30
+
+Test
+
+| Run         | Smoothed  | Step | Valuee | Training Time |
+|-------------|----------------|------|----------|---------------|
+| GELU        | 98.5673        | 30   | 98.6178  | 6.246 min     |
+| LeakyReLU   | 98.4166        | 30   | 98.4876  | 6.196 min     |
+| HardSwish   | 98.6103        | 30   | 98.728   | 6.269 min     |
+| ReLU       | 98.3856        | 30   | 98.4275  | 6.264 min     |
+
+Train
+| Run       | Smoothed | Value  | Step | Training Time |
+|-----------|----------|--------|------|---------------|
+| GELU      | 97.501   | 97.6358| 30   | 6.246 min     |
+| LeakyReLU | 97.3084  | 97.4075| 30   | 6.196 min     |
+| HardSwish | 97.5183  | 97.6308| 30   | 6.269 min     |
+| ReLU     | 97.2451  | 97.3375| 30   | 6.264 min     |
+
+Positive activation percentage
+| Run       | Smoothed | Value  | Step | Training Time |
+|-----------|----------|--------|------|---------------|
+| GELU      | 0.4191   | 0.4194 | 30   | 6.246 min     |
+| LeakyReLU | 0.4276   | 0.4271 | 30   | 6.196 min     |
+| HardSwish | 0.4034   | 0.404  | 30   | 6.269 min     |
+| ReLU     | 0.4308   | 0.4316 | 30   | 6.264 min     |
+### Combined Results
+
+| Run         | Test Value | Train Value | Positive Activation Value |
+|-------------|------------|-------------|---------------------------|
+| GELU        | 98.6178    | 97.6358     | 0.4194                    |
+| LeakyReLU   | 98.4876    | 97.4075     | 0.4271                    |
+| HardSwish   | 98.728     | 97.6308     | 0.404                     |
+| ReLU        | 98.4275    | 97.3375     | 0.4316                        |
+
+LeakyReLU 0.125 LTrain:0.090833 ATrain: 97.20% LTest:0.051325 ATest: 98.44% Time[s]: 14.04 Act: 36.8%
+
+LeakyReLU 0.06125 LTrain:0.086684 ATrain: 97.28% LTest:0.048970 ATest: 98.40% Time[s]: 14.35 Act: 38.7% w_
+
+x * F.relu(x + 3) / 6 LTrain:0.075767 ATrain: 97.63% LTest:0.038514 ATest: 98.72% Time[s]: 12.85 Act: 43.2% 
+
+x * F.relu(x + 1)  LTrain:0.082885 ATrain: 97.42% LTest:0.046766 ATest: 98.51% Time[s]: 16.99 Act: 53.1%
+
+x * F.relu(x + 4)  LTrain:0.077152 ATrain: 97.57% LTest:0.043664 ATest: 98.67% Time[s]: 12.15 Act: 39.9% 
+
+x * F.relu(x + 2) LTrain:0.076004 ATrain: 97.60% LTest:0.043627 ATest: 98.54% Time[s]: 12.64 Act: 49.0%
+
+x * F.relu(x + 3) LTrain:0.074241 ATrain: 97.68% LTest:0.042816 ATest: 98.63% Time[s]: 12.86 Act: 44.2% 
+
+x * F.relu(x + 0) LTrain:0.080196 ATrain: 97.50% LTest:0.049050 ATest: 98.54% Time[s]: 13.48 Act: 63.8%
+
+F.relu(x + 0) - 0 LTrain:0.081163 ATrain: 97.46% LTest:0.048307 ATest: 98.50% Time[s]: 12.44 Act: 43.2%
+
+F.relu(x + 1) - 1 LTrain:0.087294 ATrain: 97.30% LTest:0.049661 ATest: 98.44% Time[s]: 12.39 Act: 40.8% 
+
+F.relu(x + 2) - 2 LTrain:0.115790 ATrain: 96.44% LTest:0.055633 ATest: 98.13% Time[s]: 12.72 Act: 44.2%
+
+x * F.relu6(x + 3)  LTrain:0.075704 ATrain: 97.63% LTest:0.041766 ATest: 98.78% Time[s]: 12.41 Act: 41.5%  
+
+x * F.relu6(x + 4) LTrain:0.079159 ATrain: 97.54% LTest:0.043536 ATest: 98.55% Time[s]: 12.41 Act: 38.8%
+
+x * F.relu6(x + 2) LTrain:0.079153 ATrain: 97.49% LTest:0.044097 ATest: 98.55% Time[s]: 12.50 Act: 42.7% 
+
+x * F.relu6(x + 1) LTrain:0.077949 ATrain: 97.54% LTest:0.051734 ATest: 98.39% Time[s]: 11.97 Act: 52.4%
+
+x * F.relu6(x + 3) + NF4 LTrain:0.068223 ATrain: 97.87% LTest:0.038414 ATest: 98.72% Time[s]: 15.05 Act: 39.9%
+
+F.relu(x) + NF4  LTrain:0.082073 ATrain: 97.45% LTest:0.047435 ATest: 98.50% Time[s]: 13.68 Act: 44.7% 
+
+Can we swap to relu at inference time? Or is there also a significant inference time benefit? -> no we cant. switching activation drops accuracy, but healing is quick.
+
+## Residual connections / Resnet
+
+- Can a residual connection help to "scale down" noise, so that quantization noise is less significant?
+
+- Helps to reduce training loss slightly for 4 bit, but only if scale value is learned as well. Same for 2 bit.
+
+experiments on 64/64/64/20 epochs
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = self.ReLU(self.fc2(x))
+        x = self.ReLU(self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.070248 ATrain: 97.81% LTest:0.047278 ATest: 98.52% Time[s]: 13.93 Act: 39.5% w_clip/entropy[bits]: 0.474/2.63 0.412/3.39 0.330/3.60 0.657/3.64 
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = self.ReLU(x+self.fc2(x))
+        x = self.ReLU(x+self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.076385 ATrain: 97.59% LTest:0.040175 ATest: 98.72% Time[s]: 13.85 Act: 42.0% w_clip/entropy[bits]: 0.465/2.57 0.466/3.43 0.475/3.39 0.695/3.72 
+*2bitsym*
+Epoch [20/20], LTrain:0.110816 ATrain: 96.52% LTest:0.060259 ATest: 98.05% Time[s]: 14.13 Act: 41.0% w_clip/entropy[bits]: 0.379/1.51 0.376/1.85 0.293/1.91 0.597/1.93 
+
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = x + self.ReLU(self.fc2(x))
+        x = x + self.ReLU(self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+Epoch [20/20], LTrain:0.079785 ATrain: 97.52% LTest:0.047587 ATest: 98.59% Time[s]: 13.16 Act: 33.0% w_clip/entropy[bits]: 0.451/2.64 0.502/3.41 0.492/3.51 0.791/3.76 
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x = x * self.scale1 + self.ReLU(self.fc2(x))
+        x = x * self.scale2 + self.ReLU(self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.068703 ATrain: 97.87% LTest:0.041398 ATest: 98.59% Time[s]: 13.85 Act: 31.9% w_clip/entropy[bits]: 0.505/2.59 0.410/3.46 0.415/3.40 0.651/3.74
+*2bitsym*
+Epoch [20/20], LTrain:0.107123 ATrain: 96.55% LTest:0.060191 ATest: 97.92% Time[s]: 13.86 Act: 34.0% w_clip/entropy[bits]: 0.384/1.51 0.383/1.86 0.341/1.83 0.565/1.98 
+
+```python	
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.ReLU(self.fc1(x))
+        x =  self.ReLU(x * self.scale1 + self.fc2(x))
+        x =  self.ReLU(x * self.scale2 + self.fc3(x))
+        x = self.fc4(x)
+        return x
+```
+*4bitsym*
+Epoch [20/20], LTrain:0.071519 ATrain: 97.79% LTest:0.042721 ATest: 98.65% Time[s]: 14.60 Act: 40.3% w_clip/entropy[bits]: 0.451/2.72 0.428/3.40 0.388/3.47 0.636/3.76 
+
+*2bitsym*
+Epoch [20/20], LTrain:0.106741 ATrain: 96.64% LTest:0.065592 ATest: 97.86% Time[s]: 14.45 Act: 43.3% w_clip/entropy[bits]: 0.375/1.53 0.376/1.85 0.346/1.85 0.562/1.97 
 
 ## Mixture-of-Experts
 
 - Use routing mechanism to reduce the number of depth-wise conv2d to extract features
 
+## Review clipping algorithm
+
+- Re-Investigate whether OCTAV is really the best way to adjust clipping. The test accuracy seems to have degraded after introduction of OCTAV. 
+- Potential approaches
+  - Prioritize quantization noise over clipping noise as the network can
+    adjust to clipping noise easier than to quantization noise. (Fewer weights involved)
+  - Copilot suggestion (Why?): Use a fixed clipping value for the first layers and adjust the clipping value for the last layers. This would allow to use a higher clipping value for the first layers to extract more features and a lower clipping value for the last layers to reduce noise.
+  - train clipping value as a parameter
+  - decrease clipping value over time
+  
 
 ## Refactor models.py
 
@@ -64,6 +226,43 @@
 
 
 # Parking lot
+
+## Reorder tensors for better compressabiliy
+
+- reorder layer tensors in a way where weights are more correlated while they are
+  streamed in for MAC.
+
+*Results*
+- Reordering according to cosine similarity and L2 distance implemented.
+- Does not seem to have sufficient effect on weight correlation
+- Unforeseen issue: Delta encoding requires an additional bit, so entropy
+is not reduced.
+
+
+## Use modified ReLU to enforce sparse activations
+
+Idea is to set to only pass the top 50% of positive activations.
+
+```python	
+class ReLUTopQ(nn.Module):
+    def __init__(self):
+        super(ReLUTopQ, self).__init__()
+        
+    def forward(self, x):
+        # Handle batched inputs by taking max over all dimensions except batch
+        max_x = torch.max(x, dim=1, keepdim=True)[0]
+        return 2 * F.relu(x - 0.5 * max_x)
+```
+Results:
+
+Normal ReLU:
+`Epoch [20/20], LTrain:0.072104 ATrain: 97.77% LTest:0.040317 ATest: 98.71% Time[s]: 19.01 Act: 39.4% w_clip/entropy[bits]: 0.468/2.65 0.387/3.49 0.333/3.58 0.562/3.80 `	
+ReLUTopQ
+`Epoch [20/20], LTrain:0.110103 ATrain: 96.56% LTest:0.061737 ATest: 98.15% Time[s]: 18.96 Act: 22.4% w_clip/entropy[bits]: 0.435/2.52 0.316/3.38 0.297/3.49 0.558/3.54 `
+
+-> Activiation density is roughly reduced by factor of two, but loss is significantly higher. This does not work.
+
+Pruning the bottom 50% of positive activations without rescaling does not work (no convergence).
 
 ## Optimize fc model
 
@@ -179,4 +378,11 @@ def calculate_compression_loss(model):
             param_group['lr'] = 0.001
 ``` 
 
+## Benchmark Layernorm vs RMSnorm
 
+- Layernorm seems to be better than RMSnorm for very small networks where it improves convergence.
+  - using full layernorm is slightly worse than RMSnorm
+    - Argument: Removing bias removes information?
+  - To fix convergence in small networks, it is sufficient to use layernorm before first layer
+  - Layernorm increases nonzero activations from ~40% to ~50%
+-> stick with RMSnorm for now

@@ -1,6 +1,6 @@
-# 🚀 BitNetMCU Inference Engine Demo for CH32V003 MCU
+# 🚀 BitNetMCU Inference Engine Demo for CH32V003 (and other) MCU
 
-This folder contains a demo that implements the BitNetMCU inference engine on an actual CH32V003 MCU with 16kb flash and 2kb ram. This example is to be used with the [ch32v003fun SDK](https://github.com/cnlohr/ch32v003fun).
+This folder contains a demo that implements the BitNetMCU inference engine on an actual CH32V003 MCU with 16kb flash and 2kb ram.  This example is to be used with the [ch32fun SDK](https://github.com/cnlohr/ch32fun).
 
 ## 📁 File Descriptions
 

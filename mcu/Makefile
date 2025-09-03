@@ -1,17 +1,12 @@
 all : build
 
 TARGET:=BitNetMCUdemo
+# TARGET_MCU?=CH32V003
+TARGET_MCU?=CH32V002
 
-# Use ch32v003fun as a submodule
+CH32FUN ?= ch32v003fun/ch32fun
 
-CH32V003FUN ?= ch32v003fun/ch32v003fun
-
-
-# Alternatively, set the path to the ch32v003fun directory here
-
-# CH32V003FUN ?= /mnt/d/RISCV/ch32v003fun/ch32v003fun
-
-include $(CH32V003FUN)/ch32v003fun.mk
+include $(CH32FUN)/ch32fun.mk
 
 flash : cv_flash
 clean : cv_clean

@@ -4,7 +4,26 @@ import numpy as np
 import torch.nn.functional as F
 
 # @cpldcpu 2024-June-2
-    
+
+class Activation(nn.Module):
+    def __init__(self, mode='hardswish'):
+        super(Activation, self).__init__()
+        self.mode = mode
+
+    def forward(self, x):
+        if self.mode == 'hardswish':
+            return x * F.relu6(x + 3) / 6
+        elif self.mode == 'GeLU':
+            return F.gelu(x)
+        elif self.mode == 'ReLU':
+            return F.relu(x)
+        elif self.mode == 'ReLU2':
+            return x * F.relu(x)
+        elif self.mode == 'ReLU2swish':
+            return x * F.relu(x + 3)
+        else:
+            raise ValueError(f"Unknown activation mode: {self.mode}")
+
 class BitQuant:
     """
     Class to handle quantization of activations and weights.
@@ -19,7 +38,7 @@ class BitQuant:
     - NF4            : 4 bit non-linear quantization (NormalFloat4)
     - 8bit           : 8 bit
 
-    WScale 
+    WScale
     - PerTensor      : The weight scaling is calculated per Tensor
     - PerOutput      : The weight scaling is calculated per Output
 
@@ -35,9 +54,9 @@ class BitQuant:
 
         if self.QuantType in ['Binary', 'BinarySym']:
             self.bpw = 1
-        elif self.QuantType in ['2bitsym']: 
+        elif self.QuantType in ['2bitsym']:
             self.bpw = 2
-        elif self.QuantType in ['Ternary']: 
+        elif self.QuantType in ['Ternary']:
             self.bpw = 1.6
         elif self.QuantType in ['4bit', '4bitsym', 'FP130' , 'NF4']:
             self.bpw = 4
@@ -50,7 +69,7 @@ class BitQuant:
 
         if not self.WScale in ['PerOutput', 'PerTensor']:
             raise AssertionError(f"Invalid WScale: {self.WScale}. Expected one of: 'PerTensor', 'PerOutput'")
-    
+
     # Octave optimum clipping algorithm (C. Sakr et al., 2022)
     # see https://arxiv.org/abs/2206.06501
     def octav(self, tensor, num_iterations=10, s=-1):
@@ -63,10 +82,10 @@ class BitQuant:
             numerator = torch.sum(torch.abs(tensor) * indicator_gt)
             denominator = (4**-self.bpw / 3) * torch.sum(indicator_le) + torch.sum(indicator_gt)
             s = numerator / denominator
-        return s 
+        return s
 
     def update_clipping_scalar(self, w, algorithm='octav', quantscale=0.25):
-        """ 
+        """
         Update the weight scale factor for the quantization.
         Args:
             w:          a weight tensor with shape [d, k]
@@ -76,19 +95,19 @@ class BitQuant:
         Returns:
             s:          updated clipping scalar for the quantization
         """
-    
+
         s= self.s
 
         if algorithm == 'octav':
             if self.WScale=='PerOutput':
                 s = torch.stack([self.octav(row, 10) for row in w])
             else:
-                s = self.octav(w, 10, s)             
+                s = self.octav(w, 10, s)
         elif algorithm == 'prop':
             if self.WScale=='PerOutput':
-                s = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5) / quantscale 
+                s = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5) / quantscale
             else:
-                s = w.abs().mean().clamp_(min=1e-5) / quantscale 
+                s = w.abs().mean().clamp_(min=1e-5) / quantscale
         else:
             raise AssertionError(f"Invalid algorithm: {algorithm}. Expected one of: 'octav', 'prop'")
 
@@ -106,7 +125,7 @@ class BitQuant:
         scale: scale factor for the quantization
         """
         scale = 127.0 / x.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
-        y = (x * scale).round().clamp_(-128, 127) 
+        y = (x * scale).round().clamp_(-128, 127)
         return y, scale
 
     def weight_quant(self, w):
@@ -130,47 +149,47 @@ class BitQuant:
             scale = (2.0**(self.bpw-1)) / self.s
 
         if self.QuantType == 'Ternary': # 1.58bits
-            u = (w * scale ).round().clamp_(-1, 1) 
+            u = (w * scale ).round().clamp_(-1, 1)
         elif self.QuantType == 'Binary': # 1 bit
             e = w.mean()
-            u = (w - e).sign() 
+            u = (w - e).sign()
         elif self.QuantType == 'BinarySym': # 1 bit
-            u = w.sign() 
+            u = w.sign()
         elif self.QuantType == '2bitsym':
-            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) 
+            u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5)
         elif self.QuantType == '4bit': # 4 bit in one-complement encoding for inference with multiplication
             # u = (w * scale).round().clamp_(-8, 7) # no convergence with this?!
-            u = ((w * scale - 0.01).round().clamp_(-8, 7) + 0.01)  
+            u = ((w * scale - 0.01).round().clamp_(-8, 7) + 0.01)
         elif self.QuantType == '4bitsym':
-            u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5)  
+            u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5)
         elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 128
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
-            u = w.sign()*(e.exp2())    
+            u = w.sign()*(e.exp2())
         elif self.QuantType == 'NF4':
             # NF4 levels (16 levels for 4 bits)
-            levels = torch.tensor([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 
+            levels = torch.tensor([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
                                    0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0], device=w.device)
             u , _ = self.quantize_list(w * scale, levels)
         elif self.QuantType == '5bitsym':
             u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5)
         elif self.QuantType == '8bit': # -128 to 127
-            u = (w * scale).round().clamp_(-128, 127) 
+            u = (w * scale).round().clamp_(-128, 127)
         else:
             raise AssertionError(f"Invalid QuantType: {self.QuantType}. Expected one of: 'Binary', 'BinaryBalanced', '2bitsym', '4bitsym', '8bit'")
-        
+
         return u, scale, self.bpw
 
     def quantize_list(self, x, levels):
         """
         Quantize the input tensor x to the nearest level in the levels list.
-        """        
+        """
         # Compute the absolute difference between x and each level
         diff = torch.abs(x.unsqueeze(-1) - levels)
         # Find the index of the closest level for each element in x
         indices = torch.argmin(diff, dim=-1)
 
         return levels[indices], indices
-    
+
 class BitLinear(nn.Linear, BitQuant):
     """
     Linear fully connected layer with quantization aware training and normalization.
@@ -180,7 +199,8 @@ class BitLinear(nn.Linear, BitQuant):
     - RMS            : Root Mean Square
     - Lin            : L1 Norm
     - BatchNorm      : Batch Normalization
-    
+    - LayerNorm      : Layer Normalization
+
     This is not optimized for speed or efficiency...
 
     @cpldcpu 2024-March-24
@@ -213,7 +233,7 @@ class BitLinear(nn.Linear, BitQuant):
 
             y = F.linear(x_quant, w_quant)
         return y
-    
+
     def Normalize(self, x):
         """ Normalization. Normalizes along the last dimension -> different normalization value for each activation vector.
         Args:
@@ -228,9 +248,17 @@ class BitLinear(nn.Linear, BitQuant):
             y = torch.mean(torch.abs(x), dim=-1, keepdim=True)
             z =x / y
         elif self.NormType == 'BatchNorm':
-            z = (x - torch.mean(x, dim=-1, keepdim=True)) / (torch.std(x, dim=-1, keepdim=True) + 1e-5)
+            # BatchNorm: normalize across batch dimension
+            batch_mean = torch.mean(x, dim=0, keepdim=True)
+            batch_var = torch.var(x, dim=0, keepdim=True, unbiased=False)
+            z = (x - batch_mean) / torch.sqrt(batch_var + 1e-5)
+        elif self.NormType == 'LayerNorm':
+            # LayerNorm: normalize across feature dimension
+            layer_mean = torch.mean(x, dim=-1, keepdim=True)
+            layer_var = torch.var(x, dim=-1, keepdim=True, unbiased=False)
+            z = (x - layer_mean) / torch.sqrt(layer_var + 1e-5)
         else:
-            raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm'")
+            raise AssertionError(f"Invalid NormType: {self.NormType}. Expected one of: 'RMS', 'Lin', 'BatchNorm', 'LayerNorm'")
         return z
 
 class BitConv2d(nn.Conv2d, BitQuant):
@@ -265,7 +293,7 @@ class BitConv2d(nn.Conv2d, BitQuant):
         x_norm = self.Normalize(x)
 
         if self.QuantType == 'None':
-            y = F.conv2d(x_norm, w,  stride=self.stride, padding=self.padding, groups=self.groups )        
+            y = F.conv2d(x_norm, w,  stride=self.stride, padding=self.padding, groups=self.groups )
         else:
             x_int, x_scale = self.activation_quant(x_norm)
             x_quant = x_norm + (x_int / x_scale - x_norm).detach()
@@ -284,7 +312,7 @@ class BitConv2d(nn.Conv2d, BitQuant):
             y: a normalized tensor with shape [n, d]
             """
             if self.NormType == 'RMS':
-                y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))            
+                y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))
                 z = x / y
             elif self.NormType == 'None':
                 z = x
@@ -295,8 +323,8 @@ class BitConv2d(nn.Conv2d, BitQuant):
 class QuantizedModel:
     """
     This class represents a quantized model. It provides functionality to quantize a given model.
-    """   
-     
+    """
+
     def __init__(self, model = None):
         self.quantized_model=None
         self.total_bits=0
@@ -309,7 +337,7 @@ class QuantizedModel:
         Returns the total number of bits used by the quantized model.
         """
         return self.total_bits
-                                      
+
     def quantize(self,model):
         """
         This method quantizes the weights of the given model.
@@ -332,7 +360,7 @@ class QuantizedModel:
                 # print(f'layer: {layer} s:{layer.s})')
                 u, scale, bpw = layer.weight_quant(w)
                 numscale = 0 # TODO: store scale value for "PerOutput" scaling
-                # print (scale)                
+                # print (scale)
 
                 totalbits += bpw * u.numel() + numscale * 8
                 quantized_weight = u.cpu().numpy()
@@ -387,7 +415,7 @@ class QuantizedModel:
         self.total_bits = totalbits                
         self.quantized_model = quantized_model
 
-        return quantized_model, totalbits 
+        return quantized_model, totalbits
 
     def inference_quantized(self, input_data):
         """
@@ -400,12 +428,12 @@ class QuantizedModel:
         Returns:
         torch.Tensor: The output of the model after performing inference.
         """
-        
+
         if not self.quantized_model:
             raise ValueError("quantized_model is empty or None")
 
         scale = 127.0 / np.maximum(np.abs(input_data).max(axis=-1, keepdims=True), 1e-5)
-        current_data = np.round(input_data * scale).clip(-128, 127) 
+        current_data = np.round(input_data * scale).clip(-128, 127)
 
         for layer_info in self.quantized_model[:-1]:  # For all layers except the last one
             # print(f'layer: {layer_info["layer_type"], layer_info["layer_order"] }')
@@ -416,7 +444,7 @@ class QuantizedModel:
                     # reshape from (batch_size, channels, height, width) to (batch_size, features)
                     current_data = current_data.reshape(current_data.shape[0], current_data.shape[1] * current_data.shape[2] * current_data.shape[3])
 
-                weights = np.array(layer_info['quantized_weights']) 
+                weights = np.array(layer_info['quantized_weights'])
                 conv = np.dot(current_data, weights.T)  # Matrix multiplication
 
                 if layer_info['WScale']=='PerOutput':
@@ -438,7 +466,7 @@ class QuantizedModel:
                 kernel_size = layer_info['kernel_size'][0]  # Assuming square kernel
                 groups = layer_info['groups']
                 in_channels = layer_info['in_channels']
-                out_channels = layer_info['out_channels']   
+                out_channels = layer_info['out_channels']
 
                 weights = np.array(layer_info['quantized_weights']).reshape(
                     out_channels, in_channels // groups, kernel_size, kernel_size)
@@ -451,13 +479,13 @@ class QuantizedModel:
                 layer_info['incoming_x'] = current_data.shape[2]
                 layer_info['incoming_y'] = current_data.shape[3]
 
-                layer_info['outgoing_x'] = output.shape[2]   
+                layer_info['outgoing_x'] = output.shape[2]
                 layer_info['outgoing_y'] = output.shape[3]
 
                 for g in range(groups):
                     for i in range(output.shape[2]):
                         for j in range(output.shape[3]):
-                            patch = current_data[:, g*(in_channels//groups):(g+1)*(in_channels//groups), 
+                            patch = current_data[:, g*(in_channels//groups):(g+1)*(in_channels//groups),
                                                 i:i+kernel_size, j:j+kernel_size]
                             group_weights = weights[g*(out_channels//groups):(g+1)*(out_channels//groups)]
                             output[:, g*(out_channels//groups):(g+1)*(out_channels//groups), i, j] = \

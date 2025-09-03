@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
 from datetime import datetime
 # from models import FCMNIST, CNNMNIST
-from BitNetMCU import BitLinear, BitConv2d
+from BitNetMCU import BitLinear, BitConv2d, Activation
 import time
 import random
 import argparse
@@ -40,6 +40,36 @@ def load_model(model_name, params):
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
 
+def log_positive_activations(model, writer, epoch, all_test_images, batch_size):
+    total_activations = 0
+    positive_activations = 0
+
+    def hook_fn(module, input, output):
+        nonlocal total_activations, positive_activations
+        if isinstance(module, nn.ReLU) or isinstance(module, Activation):
+            total_activations += output.numel()
+            positive_activations += (output > 0).sum().item()
+
+    hooks = []
+    for layer in model.modules():
+        if isinstance(layer, nn.ReLU) or isinstance(layer, Activation):
+            hooks.append(layer.register_forward_hook(hook_fn))
+
+    # Run a forward pass to trigger hooks
+    with torch.no_grad():
+        for i in range(len(all_test_images) // batch_size):
+            images = all_test_images[i * batch_size:(i + 1) * batch_size]
+            model(images)
+
+    for hook in hooks:
+        hook.remove()
+
+    fraction_positive = positive_activations / total_activations
+    writer.add_scalar('Activations/positive_fraction', fraction_positive, epoch+1)
+
+    return fraction_positive
+
+
 # Function to add L1 regularization on the mask
 def add_mask_regularization(model,  lambda_l1):
     mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer)), None)
@@ -62,7 +92,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     batch_size = hyperparameters["batch_size"]  # Define your batch size
 
     # ON-the-fly augmentation requires using the (slow) dataloader. Without augmentation, we can load the entire dataset into GPU for speedup
-    if hyperparameters["augmentation"]: 
+    if hyperparameters["augmentation"]:
         train_loader = DataLoader(
         train_data, batch_size=batch_size, shuffle=True,
         num_workers=4, pin_memory=True)
@@ -96,7 +126,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
     train_loss=[]
     test_loss = []
-    
+
     # Train the CNN
     for epoch in range(num_epochs):
         correct = 0
@@ -157,30 +187,33 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
-                test_loss.append(loss.item())            
+                test_loss.append(loss.item())
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
+
+        # Log positive activations
+        activity=log_positive_activations(model, writer, epoch, all_test_images, batch_size)
 
         end_time = time.time()
         epoch_time = end_time - start_time
 
         testaccuracy = correct / total * 100
-     
-        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} w_clip/entropy[bits]: ', end='')
 
-        # update clipping scalars once per epoch        
+        print(f'Epoch [{epoch+1}/{num_epochs}], LTrain:{np.mean(train_loss):.6f} ATrain: {trainaccuracy:.2f}% LTest:{np.mean(test_loss):.6f} ATest: {correct / total * 100:.2f}% Time[s]: {epoch_time:.2f} Act: {activity*100:.1f}% w_clip/entropy[bits]: ', end='')
+
+        # update clipping scalars once per epoch
         totalbits = 0
         for i, layer in enumerate(model.modules()):
             if isinstance(layer, BitLinear) or isinstance(layer, BitConv2d):
 
-                # update clipping scalar 
+                # update clipping scalar
                 if epoch < hyperparameters['maxw_update_until_epoch']:
                     layer.update_clipping_scalar(layer.weight, hyperparameters['maxw_algo'], hyperparameters['maxw_quantscale'])
 
                 # calculate entropy of weights
                 w_quant, _, _ = layer.weight_quant(layer.weight)
                 _, counts = np.unique(w_quant.cpu().detach().numpy(), return_counts=True)
-                probabilities = counts / np.sum(counts)             
+                probabilities = counts / np.sum(counts)
                 entropy = -np.sum(probabilities * np.log2(probabilities))
 
                 print(f'{layer.s.item():.3f}/{entropy:.2f}', end=' ')
@@ -212,9 +245,9 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training script')
     parser.add_argument('--params', type=str, help='Name of the parameter file', default='trainingparameters.yaml')
-    
+
     args = parser.parse_args()
-    
+
     if args.params:
         paramname = args.params
     else:
@@ -244,7 +277,7 @@ if __name__ == '__main__':
         # Data augmentation for training data
         augmented_transform = transforms.Compose([
             # 10,10 seems to be best combination
-            transforms.RandomRotation(degrees=hyperparameters["rotation1"]),  
+            transforms.RandomRotation(degrees=hyperparameters["rotation1"]),
             transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
             transforms.Resize((16, 16)),  # Resize images to 16x16
             transforms.ToTensor(),
@@ -261,5 +294,5 @@ if __name__ == '__main__':
     print('training...')
     train_model(model, device, hyperparameters, train_data, test_data)
 
-    print('saving model...')    
+    print('saving model...')
     torch.save(model.state_dict(), f'modeldata/{runname}.pth')
