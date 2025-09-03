@@ -42,7 +42,6 @@ def load_model(model_name, params):
 
 # Function to add L1 regularization on the mask
 def add_mask_regularization(model,  lambda_l1):
-    # mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer), None)
     mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer)), None)
 
     if mask_layer is None:
@@ -191,7 +190,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         print()
 
         if epoch + 1 == hyperparameters ["prune_epoch"]:
-            for name, module in model.named_modules():
+        if epoch + 1 == hyperparameters["prune_epoch"]:
                 if isinstance(module, MaskingLayer):            
                     pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
 
