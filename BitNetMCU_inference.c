@@ -113,9 +113,6 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 2;
                 }
             }
-        // Multiplier-less inference for RV32EC
-#if defined(__riscv) && !defined(__riscv_mul)
-// #if 1
         // Multiplier-less inference for CH32V003
 // #if defined(__riscv) && !defined(__riscv_mul)
 #if defined(CH32V003) 
@@ -215,7 +212,14 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
  * @return Pointer to the end of the output array.
  */
 
-int32_t* processconv33ReLU(int32_t *activations, const int8_t *weights, uint32_t xy_input, uint32_t  n_shift , int32_t *output) {
+int32_t* processconv33ReLU(int32_t *activations, const int8_t *weightsin, uint32_t xy_input, uint32_t  n_shift , int32_t *output) {
+
+    // Create SRAM copy of the weights for speed up
+    uint8_t weights[9];
+
+    for (uint32_t i = 0; i < 9; i++) {
+        weights[i] = weightsin[i];
+    }
 
     for (uint32_t i = 0; i < xy_input - 2; i++) {
         int32_t *row = activations + i * xy_input;
@@ -229,7 +233,7 @@ int32_t* processconv33ReLU(int32_t *activations, const int8_t *weights, uint32_t
             sum += weights[3] * in[0] + weights[4] * in[1] + weights[5] * in[2];
             in += xy_input;
             sum += weights[6] * in[0] + weights[7] * in[1] + weights[8] * in[2];
-           
+
             // Apply shift and ReLU
             if (sum < 0) {
                 sum = 0;  // ReLU

@@ -962,6 +962,14 @@ Epoch [60/60], LTrain:0.021771 ATrain: 99.30% LTest:0.018820 ATest: 99.44% Time[
 TotalBits: 74368 TotalBytes: 9296.0 
 saving model...
 
+
+
+32wide, 2 bit
+
+Epoch [59/60], LTrain:0.028556 ATrain: 99.10% LTest:0.022346 ATest: 99.31% Time[s]: 22.82 Act: 45.5% w_clip/entropy[bits]: 1.139/6.66 1.716/6.28 0.938/6.67 0.732/1.76 0.649/3.51 1.048/3.53 
+Epoch [60/60], LTrain:0.027292 ATrain: 99.12% LTest:0.022582 ATest: 99.28% Time[s]: 22.65 Act: 45.5% w_clip/entropy[bits]: 1.139/6.66 1.716/6.28 0.938/6.67 0.732/1.76 0.649/3.51 1.048/3.53 
+TotalBits: 58624 TotalBytes: 7328.0 
+
 # CNN
 ![alt text](image.png)
 ![alt text](image-2.png)

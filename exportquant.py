@@ -41,8 +41,6 @@ def load_model(model_name, params):
         raise ValueError(f"Model {model_name} not found in models.py")
     
 def export_to_hfile(quantized_model, filename, runname, modelname=''):
-
-def export_to_hfile(quantized_model, filename, runname):
     """
     Exports the quantized model to an Ansi-C header file.
 

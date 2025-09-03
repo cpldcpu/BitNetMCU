@@ -7,6 +7,9 @@
 
 #ifndef BITNETMCU_MODEL_H
 #define BITNETMCU_MODEL_H
+
+#define MODEL_FCMNIST
+
 /*
 Total number of bits: 9024 (1.1015625 kbytes)
 inference of quantized model

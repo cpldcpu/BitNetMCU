@@ -223,9 +223,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         print()
 
         if epoch + 1 == hyperparameters ["prune_epoch"]:
-        if epoch + 1 == hyperparameters["prune_epoch"]:
-                if isinstance(module, MaskingLayer):            
-                    pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
+            if isinstance(module, MaskingLayer):            
+                pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
 
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
