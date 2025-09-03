@@ -1,7 +1,7 @@
 import torch, torch.nn as nn, torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
@@ -14,6 +14,7 @@ import argparse
 import yaml
 from torchsummary import summary
 import importlib
+from models import MaskingLayer
 
 #----------------------------------------------
 # BitNetMCU training
@@ -68,11 +69,21 @@ def log_positive_activations(model, writer, epoch, all_test_images, batch_size):
 
     return fraction_positive
 
+
+# Function to add L1 regularization on the mask
+def add_mask_regularization(model,  lambda_l1):
+    mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer)), None)
+
+    if mask_layer is None:
+        return 0
+    
+    l1_reg = lambda_l1 * torch.norm(mask_layer.mask, 1)
+    return l1_reg
+
+
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
-    step_size = hyperparameters["step_size"]
-    lr_decay = hyperparameters["lr_decay"]
     halve_lr_epoch = hyperparameters.get("halve_lr_epoch", -1)
     runname =  create_run_name(hyperparameters)
 
@@ -99,9 +110,13 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     if hyperparameters["scheduler"] == "StepLR":
-        scheduler = StepLR(optimizer, step_size=step_size, gamma=lr_decay)
+        scheduler = StepLR(optimizer, step_size=hyperparameters["step_size"], gamma=hyperparameters["lr_decay"])
     elif hyperparameters["scheduler"] == "Cosine":
-        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)
+        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)    
+    elif hyperparameters["scheduler"] == "CosineWarmRestarts":
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=hyperparameters["T_0"], T_mult=hyperparameters["T_mult"], eta_min=0)
+    else:
+        raise ValueError("Invalid scheduler")
 
     criterion = nn.CrossEntropyLoss()
 
@@ -125,6 +140,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
+                if epoch < hyperparameters['prune_epoch']:
+                    loss += add_mask_regularization(model, hyperparameters["lambda_l1"])
                 loss.backward()
                 optimizer.step()
                 train_loss.append(loss.item())
@@ -142,6 +159,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
+                if epoch < hyperparameters['prune_epoch']:
+                    loss += add_mask_regularization(model, hyperparameters["lambda_l1"])
                 loss.backward()
                 optimizer.step()
                 train_loss.append(loss.item())
@@ -153,6 +172,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.5
             print(f"Learning rate halved at epoch {epoch + 1}")
+
 
         trainaccuracy = correct / len(train_loader.dataset) * 100
 
@@ -202,6 +222,11 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
         print()
 
+        if epoch + 1 == hyperparameters ["prune_epoch"]:
+        if epoch + 1 == hyperparameters["prune_epoch"]:
+                if isinstance(module, MaskingLayer):            
+                    pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
+
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
         writer.add_scalar('Loss/test', np.mean(test_loss), epoch+1)
@@ -239,6 +264,7 @@ if __name__ == '__main__':
 
     # Load the MNIST dataset
     transform = transforms.Compose([
+        # transforms.CenterCrop(26),
         transforms.Resize((16, 16)),  # Resize images to 16x16
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))

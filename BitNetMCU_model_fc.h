@@ -5,6 +5,8 @@
 
 #include <stdint.h>
 
+#define MODEL_FCMNIST
+
 #ifndef BITNETMCU_MODEL_H
 #define BITNETMCU_MODEL_H
 
