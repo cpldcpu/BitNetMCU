@@ -12,7 +12,9 @@ int32_t* processconv33ReLU(int32_t *activations, const int8_t *weights, uint32_t
 // #include "BitNetMCU_model_12k.h"
 // #include "BitNetMCU_model_12k_FP130.h"
 // #include "BitNetMCU_model_cnn_48.h"
-#include "BitNetMCU_model_cnn.h"
+// #include "BitNetMCU_model_cnn_32.h"
+// #include "BitNetMCU_model_cnn_16.h"
+#include "BitNetMCU_model_cnn_64.h"
 #include "../BitNetMCU_inference.c"
 #include <stdio.h>
 
@@ -28,7 +30,7 @@ const uint8_t label_2 = 9;
 #ifdef MODEL_CNNMNIST
 
 uint32_t BitMnistInference(const int8_t *input) {
-    int32_t layer_out[MAX_N_ACTIVATIONS];
+    int32_t layer_out[256];  // has to hold 16x16 image
     int8_t layer_in[MAX_N_ACTIVATIONS*4];
 
     /*
@@ -99,7 +101,8 @@ uint32_t BitMnistInference(const int8_t *input) {
 #endif
 
 void TestSample(const int8_t *input, const uint8_t label, const uint8_t sample) {
-	uint32_t startticks, endticks, prediction;
+	volatile int32_t startticks, endticks;
+    int32_t prediction;
 
 	startticks = SysTick->CNT;
 	prediction = BitMnistInference(input);
