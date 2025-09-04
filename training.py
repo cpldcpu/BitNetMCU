@@ -280,6 +280,7 @@ if __name__ == '__main__':
             transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
             transforms.Resize((16, 16)),  # Resize images to 16x16
             transforms.ToTensor(),
+            # transforms.RandomErasing(p=0.5, scale=(0.02, 0.2), ratio=(0.3, 3.3), value=0),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
 
