@@ -809,39 +809,48 @@ Due to this, CNNs are vastly more powerful for image recognition tasks and were 
 
 But how do we implement them on a very limited low-end microcontroller? What is easy in PyTorch is not necessarily easy when doing it manually in C on a memory and compute limited device.
 
-1) Convolutional layers are parameter efficient, but computationally very expensive. Every parameter in the kernel is multiplied with every pixel in the input image. This leads to a large number of operations, which can be easily parallelized on a GPU, but are very time consuming on a single-core MCU.
    
-2) CNN tend to increase the number of channels (feature maps) as progressing through the layers. Even for a 16x16 image, we need 512 or 1024 bytes per channel if we store them in parallel. This quickly exceeds the available RAM of only 3 or 4kB.
+1) CNN tend to increase the number of channels (feature maps) as progressing through the layers. Even for a 16x16 image, we need 512 or 1024 bytes per channel if we store them in parallel. This quickly exceeds the available RAM of only 3 or 4kB.
+
+2) Convolutional layers are parameter efficient, but computationally very expensive. Every parameter in the kernel is multiplied with every pixel in the input image. This leads to a large number of operations, which can be easily parallelized on a GPU, but are very time consuming on a single-core MCU.
 
 3) The convolution operation requires a lot of special case handling like padding, stride, and dilation. This makes the implementation more complex and increases code size.
 
-Following a lengthy human-assisted architecture search, these challenges were addressed as follows:
+### Model architecture
 
-- Deep depthwise convolutions
-- In-place processing of channels
-- Simplified conv2d implementation
-- Variable quantization
-
-
-
-
-
-### sdfsdf
+Following a lengthy "human-assisted architecture search", I settled with the following architecture:
 
 <div align="center">
-    <img src="Model_cnn_mcu.png" width="90%"> 
+    <img src="Model_cnn_overview.png" width="70%"> 
 </div>
 
+The first layer of the former fully connected model is replaced with convolutional layers that perform the function of extracting features from the input image. 
+
+### Deep-Depthwise Convolution and in-place processing
+
+The implementation of the CNN layers is a bit unusual. Typically, a CNN is evaluated layer-by-layer. However, when the number of channels is expanded, this results in quickly increasing memory requirements. For example, to store the activations of a 16x16 images with 32 bit precision and 64 channels, we would need 16*16*4*64B = 65536B = 64kB of RAM, which exceeds the capabilities of the target device by far. In addition, performing convolutions across all channels requires a lot of computational power - 16x16x3x3x64x64 = 9,437,184 multiplications for just one layer.
+
+To avoid this, a technique called depthwise separable convolutions had been introduced for architectures targeting mobile devices, prominently used in MobileNet[^14] and Xcpetion[^15]. Here, the convolution is split into two separate operations: a depthwise convolution that operates on each channel separately and a pointwise operation that combines the outputs. This reduces the number of parameters and computations significantly. For the example above, the number of multiplications reduces to 16x16x3x3x64 + 16x16x64x64 = 1,196,032, which is signifantly less.
+
+We take this concept one step further and use deep depthwise separated convolutions, where we perform multiple depthwise convolutions and maxpooling operations in sequence.
+
+<div align="center">
+    <img src="Model_cnn_channel.png" width="40%"> 
+</div>
+
+The image above shows the architecture of a single CNN channel. The input image is processed by three convolution layers with ReLU activation and two maxpooling layers. The output is a 2x2=1x4 feature map. A total of 64 channels are processed in parallel and the resultsing 64x2x4 = 256 values are then fed into the fully connected layers.
+
+This approach has the advantage that each channel can be processed separately and only the 4 final activitation needs to be stored. In addition, we can use in-place processing[^16] where the output of each layers replaces the input data in the same memory array. This allows us to reduce the memory footprint of the convolution operations to that of a single channel: 16x16x4B = 1kbyte.
 
 ### Simplifying convolutions and implementation
 
 Addressing the third point: To reduce complexity, I opted to go for the simplest possible conv2d operations: A 3x3 kernel with stride 1 and no padding. This allows for a greatly simplified implementation as no special case handling is required.
 
+A potential issue is that patterns at the edge of the image cannot be detected well. However, as shown in the figure below, the edge pixels are almost never used in the MNIST dataset. (Left: Probability of each pixel being part of a digit in both the MNIST train and test set. Right: Black indicates pixels that are never used.)
+
 <div align="center">
     <img src="combined_pixel_analysis.png" width="70%"> 
 </div>
-
-A potential issue is that patterns at the edge of the image cannot be detected well. However, as shown in the figure above, the edge pixels are almost never used in the MNIST dataset. (Left: Probability of each pixel being part of a digit in both the MNIST train and test set. Right: Black indicates pixels that are never used.)
 
 The code of the simplified convolution operation is shown below. It is unrolled for a 3x3 kernel and is fused with a ReLU activation function. 
 
@@ -901,6 +910,21 @@ int32_t *processmaxpool22(int32_t *activations, uint32_t xy_input, int32_t *outp
     return output;
 }
 ```
+
+<div align="center">
+    <img src="model_cnn_mcu.png" width="70%"> 
+</div>
+
+- Simplified conv2d implementation
+- Variable quantization
+
+
+- Deep depthwise convolutions
+- In-place processing of channels
+
+
+
+
 
 binary
 Total number of bits: 90112 (11.0 kbytes)
@@ -1228,6 +1252,11 @@ Inference of Sample 3   Prediction: 9   Label: 9        Timing: 739585 clock cyc
 | 64-wide 2-bit (90ep) | 64 | 2-bit | 90 | 99.47% | **99.55%** | **0.45%** | 90,112 bits (11.0 kB) |
 | 80-wide 2-bit (90ep) | 80 | 2-bit | 90 | 99.51% | 99.42% | 0.58% | 105,856 bits (13.2 kB) |
 
+
+
+64-wide 2-bit (90ep) + 50% elastic
+Epoch [90/90], LTrain:0.027318 ATrain: 99.14% LTest:0.015479 ATest: 99.51% Time[s]: 32.58 Act: 48.2% w_clip/entropy[bits]: 1.209/6.85 1.489/6.71 1.204/6.87 0.792/1.73 0.754/3.40 1.395/3.31 
+TotalBits: 90112 TotalBytes: 11264.0 
 
 # References
 
