@@ -278,6 +278,9 @@ if __name__ == '__main__':
             # 10,10 seems to be best combination
             transforms.RandomRotation(degrees=hyperparameters["rotation1"]),
             transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
+            # transforms.RandomApply([
+            #     transforms.ElasticTransform(alpha=40.0, sigma=4.0)
+            # ], p=0.5), # p=0.5 means it's applied 50% of the time
             transforms.Resize((16, 16)),  # Resize images to 16x16
             transforms.ToTensor(),
             # transforms.RandomErasing(p=0.5, scale=(0.02, 0.2), ratio=(0.3, 3.3), value=0),
