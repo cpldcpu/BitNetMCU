@@ -29,7 +29,7 @@ def load_model(model_name, params):
     try:
         module = importlib.import_module('models')
         model_class = getattr(module, model_name)
-        return model_class(
+        kwargs = dict(
             network_width1=params["network_width1"],
             network_width2=params["network_width2"],
             network_width3=params["network_width3"],
@@ -37,6 +37,9 @@ def load_model(model_name, params):
             NormType=params["NormType"],
             WScale=params["WScale"]
         )
+        if 'num_classes' in params:
+            kwargs['num_classes'] = params['num_classes']
+        return model_class(**kwargs)
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
 
@@ -223,8 +226,9 @@ def train_model(model, device, hyperparameters, train_data, test_data):
         print()
 
         if epoch + 1 == hyperparameters ["prune_epoch"]:
-            if isinstance(module, MaskingLayer):            
-                pruned_channels, remaining_channels = module.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
+            for m in model.modules():
+                if isinstance(m, MaskingLayer):            
+                    pruned_channels, remaining_channels = m.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
 
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
@@ -261,36 +265,67 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the MNIST dataset
+    # Dataset selection (MNIST default, EMNIST optional)
+    dataset_name = hyperparameters.get("dataset", "MNIST").upper()
+
+    if dataset_name == "MNIST":
+        num_classes = 10
+        mean, std = (0.1307,), (0.3081,)
+        base_dataset_train = datasets.MNIST
+        base_dataset_test = datasets.MNIST
+        dataset_kwargs = {"train": True}
+        dataset_kwargs_test = {"train": False}
+    elif dataset_name.startswith("EMNIST"):
+        # Expected format: EMNIST or EMNIST_BALANCED, EMNIST_BYCLASS etc.
+        # Torchvision subsets: 'byclass'(62), 'bymerge'(47), 'balanced'(47), 'letters'(26), 'digits'(10), 'mnist'(10)
+        split = dataset_name.split('_')[1].lower() if '_' in dataset_name else 'balanced'
+        # Map common names
+        split_alias = { 'BALANCED':'balanced', 'BYCLASS':'byclass', 'BYMERGE':'bymerge', 'LETTERS':'letters', 'DIGITS':'digits', 'MNIST':'mnist'}
+        split = split_alias.get(split.upper(), split)
+        # class counts per split
+        split_classes = { 'byclass':62, 'bymerge':47, 'balanced':47, 'letters':26, 'digits':10, 'mnist':10 }
+        num_classes = split_classes.get(split, 47)
+        # EMNIST uses same normalization as MNIST typically
+        mean, std = (0.1307,), (0.3081,)
+        from torchvision.datasets import EMNIST
+        base_dataset_train = EMNIST
+        base_dataset_test = EMNIST
+        dataset_kwargs = {"split": split, "train": True}
+        dataset_kwargs_test = {"split": split, "train": False}
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
+
     transform = transforms.Compose([
-        # transforms.CenterCrop(26),
-        transforms.Resize((16, 16)),  # Resize images to 16x16
+        transforms.Resize((16, 16)),
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize(mean, std)
     ])
 
-    train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
-    test_data = datasets.MNIST(root='data', train=False, transform=transform)
+    train_data = base_dataset_train(root='data', transform=transform, download=True, **dataset_kwargs)
+    test_data = base_dataset_test(root='data', transform=transform, download=True, **dataset_kwargs_test)
 
     if hyperparameters["augmentation"]:
         # Data augmentation for training data
         augmented_transform = transforms.Compose([
-            # 10,10 seems to be best combination
             transforms.RandomRotation(degrees=hyperparameters["rotation1"]),
-            transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
+            transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),
             transforms.RandomApply([
                 transforms.ElasticTransform(alpha=40.0, sigma=4.0)
-            ], p=hyperparameters["elastictransformprobability"]), # p=0.5 means it's applied 50% of the time
-            transforms.Resize((16, 16)),  # Resize images to 16x16
+            ], p=hyperparameters["elastictransformprobability"]),
+            transforms.Resize((16, 16)),
             transforms.ToTensor(),
-            # transforms.RandomErasing(p=0.5, scale=(0.02, 0.2), ratio=(0.3, 3.3), value=0),
-            transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize(mean, std)
         ])
 
-        augmented_train_data = datasets.MNIST(root='data', train=True, transform=augmented_transform)
+        augmented_train_data = base_dataset_train(root='data', transform=augmented_transform, download=True, **dataset_kwargs)
         train_data = ConcatDataset([train_data, augmented_train_data])
 
-    model = load_model(hyperparameters["model"], hyperparameters).to(device)
+    # Pass num_classes dynamically to model
+    hyperparameters['num_classes'] = num_classes
+    model = load_model(hyperparameters["model"], {**hyperparameters, 'num_classes': num_classes})
+    # If model class supports num_classes argument, it will be used. Otherwise ignore.
+    if hasattr(model, 'to'):
+        model = model.to(device)
 
     summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)
 

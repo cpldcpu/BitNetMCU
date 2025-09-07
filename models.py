@@ -60,7 +60,7 @@ class FCMNIST(nn.Module):
     @cpldcpu 2024-March-24
 
     """
-    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
+    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS', num_classes: int = 10):
         super(FCMNIST, self).__init__()
 
         self.network_width1 = network_width1
@@ -79,7 +79,9 @@ class FCMNIST(nn.Module):
             self.model.add_module("fc3", BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale))
             self.model.add_module("relu_fc2", nn.ReLU())
 
-        self.classifier= BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        last_width = network_width3 if network_width3>0 else network_width2
+        # Output layer parameterized by number of classes (default 10 for MNIST / 47 for EMNIST balanced, etc.)
+        self.classifier= BitLinear(last_width, num_classes,QuantType=QuantType,NormType=NormType, WScale=WScale)
 
     def forward(self, x):
         x = self.model(x)
@@ -95,7 +97,7 @@ class CNNMNIST(nn.Module):
     @cpldcpu 2024-April-19
 
     """
-    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS'):
+    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS', num_classes: int = 10):
         super(CNNMNIST, self).__init__()
 
         self.network_width1 = network_width1
@@ -126,7 +128,9 @@ class CNNMNIST(nn.Module):
             self.model.add_module("fc3", BitLinear(network_width2, network_width3,QuantType=QuantType,NormType=NormType, WScale=WScale))
             self.model.add_module("relu_fc2", nn.ReLU())
 
-        self.classifier= BitLinear(network_width2, 10,QuantType=QuantType,NormType=NormType, WScale=WScale)
+        last_width = network_width3 if network_width3>0 else network_width2
+        # Output layer parameterized by number of classes (default 10 for MNIST / 47 for EMNIST balanced, etc.)
+        self.classifier= BitLinear(last_width, num_classes,QuantType=QuantType,NormType=NormType, WScale=WScale)
         # self.dropout = nn.Dropout(0.05)
 
     def forward(self, x):
