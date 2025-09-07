@@ -9,7 +9,7 @@ This folder contains a demo that implements the BitNetMCU inference engine on an
 - [`funconfig.h`](funconfig.h): Configuration of main clock speed, and SysTick clock source for the CH32V003 MCU.
 
 
-- [`BitNetMCU_model_12k.h`](BitNetMCU_model_12k.h): A model optimized for high accuracy, achieving 94.02% test accuracy on MNIST. 4 Bit weights, 64/64/64 hidden layer width. 13.66 ms inference time.
+- [`BitNetMCU_model_12k.h`](BitNetMCU_model_12k.h): A model optimized for high accuracy, achieving 99.02% test accuracy on MNIST. 4 Bit weights, 64/64/64 hidden layer width. 13.66 ms inference time.
   
 - [`BitNetMCU_model_12k_FP130.h`](BitNetMCU_model_12k_FP130.h): A model optimizing for both accuracy and inference speed by using FP1.3.0 encoding. Achieving 98.86% test accuracy on MNIST. 4 Bit weights, 64/64/64 hidden layer width. 10.17 ms inference time.
 
