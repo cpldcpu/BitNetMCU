@@ -14,6 +14,7 @@ int32_t* processconv33ReLU(int32_t *activations, const int8_t *weights, uint32_t
 // #include "BitNetMCU_model_cnn_48.h"
 // #include "BitNetMCU_model_cnn_32.h"
 // #include "BitNetMCU_model_cnn_16.h"
+// #include "BitNetMCU_model_cnn_16small.h"
 #include "BitNetMCU_model_cnn_64.h"
 #include "../BitNetMCU_inference.c"
 #include <stdio.h>
