@@ -195,6 +195,29 @@ Neither did additional experiments (not shown) with a fully connected CNN archit
  
 This suggests that the remaining mispredicted samples are far out of distribution for the given model. Possibly ensemble methods or a much higher capacity model coupled with a different regularization scheme would be required to push the error rate further down.
 
+
+
+EMNIST_LETTERS
+Epoch [60/60], LTrain:0.180942 ATrain: 93.63% LTest:0.172070 ATest: 94.18% Time[s]: 38.14 Act: 45.7% w_clip/entropy[bits]: 1.336/6.92 3.164/5.91 2.310/6.23 1.408/1.66 1.252/3.18 2.835/2.81 
+TotalBits: 97024 TotalBytes: 12128.0 
+
+saving model...
+EMNIST_BALANCED
+Epoch [60/60], LTrain:0.333171 ATrain: 87.63% LTest:0.329145 ATest: 88.24% Time[s]: 46.06 Act: 45.5% w_clip/entropy[bits]: 1.299/6.87 3.305/5.94 1.185/6.89 1.455/1.69 1.219/3.29 1.834/3.21 
+TotalBits: 99584 TotalBytes: 12448.0 
+saving model...
+
+### Performance on EMNIST Letters and Balanced
+
+I also trained the 64-wide CNN-96-64 model on the EMNIST_LETTERS and EMNIST_BALANCED datasets[^17], which have more than 10 classes. The results are shown below. Despite the model was not optimized for these much larger datasets, the performance is still very good. 
+
+| Dataset         | Classes | Train Acc | Test Loss | Test Acc | Model Size (kB) |
+|-----------------|---------|-----------|-----------|----------|-----------------|
+| EMNIST_LETTERS  | 37      | 93.63%    | 0.172070  | 94.18%   | 11.84 |
+| EMNIST_BALANCED | 47      | 87.63%    | 0.329145  | 88.24%   | 12.17 |
+
+The EMNIST_BALANCED dataset contains numbers and letters and is therefore suitable to implement a simple OCR application on a low end microcontroller.
+
 ### Inference Performance on MCU
 
 All performance data was collected on a CH32V002 microcontroller running at 48 MHz, 2 flash waitstates, inner loops executed from SRAM.
@@ -230,4 +253,5 @@ The plot above shows the tradeoff between model size, accuracy and inference tim
 
 [^16]: J. Lin et al. *MCUNet: Tiny Deep Learning on IoT Devices* ([arXiv:2007.10319](https://arxiv.org/abs/2007.10319))
 
+[^17]: G. Cohen et al. *EMNIST: an extension of MNIST to handwritten letters* ([arXiv:1702.05373](https://arxiv.org/abs/1702.05373))
 
