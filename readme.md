@@ -60,4 +60,4 @@ The data pipeline is split into several Python scripts for flexibility:
 - 26th May 2024 - [tagged version 0.2a](https://github.com/cpldcpu/BitNetMCU/tree/0.2a)
 - 19th July 2024 - [Added octav algorithm](https://github.com/cpldcpu/BitNetMCU/blob/main/docs/documentation.md#july-19-2024-octav-optimum-clipping) to calculate optimal clipping and quantization parameters.
 - 26th July 2024 -  Added support for NormalFloat4 (NF4) Quantization. [Updated documentation](docs/documentation.md#july-26-2024-normalfloat4-nf4-quantization)
-- 6th June 2024 - New CNN architecture based on sequential depthwise separable convolutions allows to reach 99.55% accuracy while still fitting into 16kb Flash and 2kb RAM. [See documentation](docs/documentation_cnn.md) for details.
+- 7th September 2025 - New CNN architecture based on sequential depthwise separable convolutions allows to reach 99.55% accuracy while still fitting into 16kb Flash and 4kb RAM. [See documentation](docs/documentation_cnn.md) for details.
