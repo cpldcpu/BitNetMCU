@@ -2,7 +2,7 @@
 
 **Beating 99.5% MNIST accuracy with Convolutional Neural Networks for Low-Bit Quantized Neural Networks on low-end 32 Bit Microcontrollers**
 
-*T. S. Boescke, Sept 2025* [Document origin](https://github.com/cpldcpu/BitNetMCU/tree/main/docs) 
+*Tim Boescke, Sept 2025* [Document origin](https://github.com/cpldcpu/BitNetMCU/tree/main/docs) 
 
 ## Table of Contents
 - [BitNetMCU - CNN Implementation](#bitnetmcu---cnn-implementation)
