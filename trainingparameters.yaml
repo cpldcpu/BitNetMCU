@@ -2,7 +2,8 @@
 
 # Model selection
 model: 'CNNMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model as defined in models.py.
-
+dataset: 'MNIST' # 'MNIST', or EMNIST splits: EMNIST_BALANCED, EMNIST_BYCLASS, EMNIST_BYMERGE, EMNIST_LETTERS, EMNIST_DIGITS, EMNIST_MNIST
+  
 # Quantization settings
 QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4'
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'

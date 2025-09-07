@@ -277,13 +277,13 @@ if __name__ == '__main__':
         dataset_kwargs_test = {"train": False}
     elif dataset_name.startswith("EMNIST"):
         # Expected format: EMNIST or EMNIST_BALANCED, EMNIST_BYCLASS etc.
-        # Torchvision subsets: 'byclass'(62), 'bymerge'(47), 'balanced'(47), 'letters'(26), 'digits'(10), 'mnist'(10)
+        # Torchvision subsets: 'byclass'(62), 'bymerge'(47), 'balanced'(47), 'letters'(37), 'digits'(10), 'mnist'(10)
         split = dataset_name.split('_')[1].lower() if '_' in dataset_name else 'balanced'
         # Map common names
         split_alias = { 'BALANCED':'balanced', 'BYCLASS':'byclass', 'BYMERGE':'bymerge', 'LETTERS':'letters', 'DIGITS':'digits', 'MNIST':'mnist'}
         split = split_alias.get(split.upper(), split)
         # class counts per split
-        split_classes = { 'byclass':62, 'bymerge':47, 'balanced':47, 'letters':26, 'digits':10, 'mnist':10 }
+        split_classes = { 'byclass':62, 'bymerge':47, 'balanced':47, 'letters':37, 'digits':10, 'mnist':10 }
         num_classes = split_classes.get(split, 47)
         # EMNIST uses same normalization as MNIST typically
         mean, std = (0.1307,), (0.3081,)

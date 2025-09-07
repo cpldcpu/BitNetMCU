@@ -26,17 +26,21 @@ def create_run_name(hyperparameters):
     return runname
 
 def load_model(model_name, params):
+    """Instantiate model; forwards num_classes if provided."""
     try:
         module = importlib.import_module('models')
         model_class = getattr(module, model_name)
-        return model_class(
+        kwargs = dict(
             network_width1=params["network_width1"],
             network_width2=params["network_width2"],
             network_width3=params["network_width3"],
             QuantType=params["QuantType"],
             NormType=params["NormType"],
-            WScale=params["WScale"]
+            WScale=params["WScale"],
         )
+        if 'num_classes' in params:
+            kwargs['num_classes'] = params['num_classes']
+        return model_class(**kwargs)
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
     
@@ -375,26 +379,67 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the MNIST dataset
+    # Dataset selection (mirror training.py logic)
+    dataset_name = hyperparameters.get("dataset", "MNIST").upper()
+
+    if dataset_name == "MNIST":
+        num_classes = 10
+        mean, std = (0.1307,), (0.3081,)
+        base_dataset_train = datasets.MNIST
+        base_dataset_test = datasets.MNIST
+        dataset_kwargs = {"train": True}
+        dataset_kwargs_test = {"train": False}
+    elif dataset_name.startswith("EMNIST"):
+        split = dataset_name.split('_')[1].lower() if '_' in dataset_name else 'balanced'
+        split_alias = { 'BALANCED':'balanced', 'BYCLASS':'byclass', 'BYMERGE':'bymerge', 'LETTERS':'letters', 'DIGITS':'digits', 'MNIST':'mnist'}
+        split = split_alias.get(split.upper(), split)
+        split_classes = { 'byclass':62, 'bymerge':47, 'balanced':47, 'letters':37, 'digits':10, 'mnist':10 }
+        num_classes = split_classes.get(split, 47)
+        from torchvision.datasets import EMNIST
+        mean, std = (0.1307,), (0.3081,)
+        base_dataset_train = EMNIST
+        base_dataset_test = EMNIST
+        dataset_kwargs = {"split": split, "train": True}
+        dataset_kwargs_test = {"split": split, "train": False}
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
+
     transform = transforms.Compose([
-        transforms.Resize((16, 16)),  # Resize images to 16x16
+        transforms.Resize((16, 16)),
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize(mean, std)
     ])
 
-    train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
-    test_data = datasets.MNIST(root='data', train=False, transform=transform)
+    # Only test set strictly needed here, but keep parity
+    train_data = base_dataset_train(root='data', transform=transform, download=True, **dataset_kwargs)
+    test_data = base_dataset_test(root='data', transform=transform, download=True, **dataset_kwargs_test)
+
+    hyperparameters['num_classes'] = num_classes
     # Create data loaders
     test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
 
     model = load_model(hyperparameters["model"], hyperparameters).to(device)
 
     print('Loading model...')
+    checkpoint_path = f'modeldata/{runname}.pth'
     try:
-        model.load_state_dict(torch.load(f'modeldata/{runname}.pth', weights_only=True))
+        state = torch.load(checkpoint_path, map_location='cpu')
     except FileNotFoundError:
-        print(f"The file 'modeldata/{runname}.pth' does not exist.")
+        print(f"The file '{checkpoint_path}' does not exist.")
         exit()
+
+    # Attempt load; if classifier size mismatch, rebuild with inferred num_classes from checkpoint
+    try:
+        model.load_state_dict(state, strict=True)
+    except RuntimeError as e:
+        if 'classifier.weight' in str(e):
+            saved_classes = state['classifier.weight'].shape[0]
+            print(f"Classifier size mismatch. Rebuilding model with num_classes={saved_classes} (was {hyperparameters.get('num_classes')}).")
+            hyperparameters['num_classes'] = saved_classes
+            model = load_model(hyperparameters["model"], hyperparameters).to(device)
+            model.load_state_dict(state, strict=True)
+        else:
+            raise
 
     print('Inference using the original model...')
     correct = 0
