@@ -2,12 +2,14 @@
 
 **BitNetMCU** is a project focused on the training and inference of low-bit quantized neural networks, specifically designed to run efficiently on low-end microcontrollers like the CH32V003. Quantization aware training (QAT) and fine-tuning of model structure and inference code allowed *surpassing 99% Test accuracy on a 16x16 MNIST dataset without using multiplication instructions and in only 2kb of RAM and 16kb of Flash*.
 
+**Update** Introducing a new model architecture based on deep separable convolutions allowed to push the accuracy even further to *99.55% test accuracy* on the new CH32V002 with 2kb of RAM and 16kb of Flash and hardware multiplier, meeting state-of-the-art MNIST accuracy.
+
 The training pipeline is based on PyTorch and should run anywhere. The inference engine is implemented in Ansi-C and can be easily ported to any Microcontroller.
 
 **You can find a detailed report on the project in the `docs/` directory [here](docs/documentation.md).**
 
 <div align="center">
-    <img src="docs/header.png" width="95%">
+    <img src="docs/header_cnn.png" width="95%">
 </div>
 
 ## Project Structure
