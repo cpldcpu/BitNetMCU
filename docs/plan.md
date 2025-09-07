@@ -28,6 +28,7 @@
 
 ### packing 
 
+https://compilade.net/blog/ternary-packing
 
 ```c
 // Pack 20 trits (values in {-1,0,1}) into a 32-bit word
@@ -57,15 +58,15 @@ uint32_t pack_trits_32(const int8_t* trits) {
 ```c
 // Unpack 20 trits from a 32-bit word
 void unpack_trits_32(uint32_t packed, int8_t* trits) {
-    uint32_t val = packed;
+    uint64_t val = packed & 0xFFFFFFFFULL; // Use 64-bit to prevent overflow
     
     for (int i = 0; i < 20; i++) {
         // Extract trit from the two MSBs
-        uint8_t trit = val >> 30;
+        uint8_t trit = val >> 32; // Get the top 2 bits
         trits[i] = trit - 1;  // Convert {0,1,2} to {-1,0,1}
         
         // Clear the MSBs and shift up remaining trits
-        val = (val & 0x3FFFFFFF) * 3;
+        val = (val & 0xFFFFFFFFULL) * 3;
     }
 }
 ```
