@@ -6,7 +6,7 @@
 
 The training pipeline is based on PyTorch and should run anywhere. The inference engine is implemented in Ansi-C and can be easily ported to any Microcontroller.
 
-**You can find a detailed report on the project in the `docs/` directory [here](docs/documentation.md) and the CNN implementation details [here](docs/documentation_cnn.md).**
+**You can find a detailed report on the project in the `docs/` directory [here](docs/documentation.md) and CNN details [here](docs/documentation_cnn.md).**
 
 <div align="center">
     <img src="docs/header_cnn.png" width="95%">
