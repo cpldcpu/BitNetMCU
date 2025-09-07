@@ -24,6 +24,72 @@
 
 # Funnel
 
+## Ternary encoding
+
+### packing 
+
+
+```c
+// Pack 20 trits (values in {-1,0,1}) into a 32-bit word
+uint32_t pack_trits_32(const int8_t* trits) {
+    uint32_t value = 0;
+    
+    // Build base-3 number from trits (least significant first)
+    for (int i = 19; i >= 0; i--) {
+        value = value * 3 + (trits[i] + 1);  // Map {-1,0,1} to {0,1,2}
+    }
+    
+    // Scale so first trit appears in MSBs
+    // Multiply by 2^32 / 3^20 using fixed-point arithmetic
+    // 2^32 / 3^20 ≈ 1.23116 
+    // Using 64-bit intermediate to avoid overflow
+    uint64_t scaled = ((uint64_t)value << 32) / 3486784401ULL;
+    
+    // Ceiling division to avoid errors during unpacking
+    if (((uint64_t)value << 32) % 3486784401ULL != 0) {
+        scaled++;
+    }
+    
+    return (uint32_t)scaled;
+}
+```
+### unpacking
+```c
+// Unpack 20 trits from a 32-bit word
+void unpack_trits_32(uint32_t packed, int8_t* trits) {
+    uint32_t val = packed;
+    
+    for (int i = 0; i < 20; i++) {
+        // Extract trit from the two MSBs
+        uint8_t trit = val >> 30;
+        trits[i] = trit - 1;  // Convert {0,1,2} to {-1,0,1}
+        
+        // Clear the MSBs and shift up remaining trits
+        val = (val & 0x3FFFFFFF) * 3;
+    }
+}
+```
+
+### inference?
+
+```c
+   // encoding:
+   // 0 = 00 = +1
+   // 1 = 01 = -1
+   // 2 = 10 =  0
+
+      int32_t sum=0;
+      for (uint32_t j = 0; j < 16; j++) {
+          if !(weightChunk & 0x80000000) {
+              int32_t in = *activations_idx;
+              sum += (weightChunk & 0x40000000) ? -in : in; 
+          }
+          activations_idx++;
+          weightChunk += (weightChunk << 1); // weightchunk = weightchunk * 3
+      }
+```
+
+
 ## Activation functions other than ReLU
 
 Can activations functions help to improve network capacity and alleviate quantization noise?
