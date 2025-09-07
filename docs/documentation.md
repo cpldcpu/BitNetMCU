@@ -1,6 +1,6 @@
 # BitNetMCU
 
-**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
+**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end 32 Bit Microcontroller**
 
 ## Table of Contents
 - [Introduction and Motivation](#introduction-and-motivation)
