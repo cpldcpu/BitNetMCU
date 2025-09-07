@@ -1,6 +1,8 @@
 # BitNetMCU
 
 **Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**- [BitNetMCU](#bitnetmcu)
+
+## Table of Contents
 - [Introduction and Motivation](#introduction-and-motivation)
   - [Background](#background)
 - [Implementation of training code](#implementation-of-training-code)
@@ -882,381 +884,86 @@ int32_t* processconv33ReLU(int32_t *activations, const int8_t *weights, uint32_t
     return output;
 }
 ```
+### Variable quantization
 
-The other primitive that is required for CNNs is max-pooling, which reduces the spatial dimensions of the image by taking the maximum value in a 2x2 patch. 
-
-```c
-int32_t *processmaxpool22(int32_t *activations, uint32_t xy_input, int32_t *output) {
-    uint32_t xy_output = xy_input / 2;
-
-    // Iterate over the output array dimensions
-    for (uint32_t i = 0; i < xy_output; i++) {
-        int32_t *row = activations + (2 * i) * xy_input;
-        for (uint32_t j = 0; j < xy_output; j++) {            
-
-            // Find the maximum value in the corresponding 2x2 patch in the input activations
-            int32_t max_val;
-            max_val = row[0];
-            max_val = max_val > row[xy_input] ? max_val : row[xy_input];
-            row++;
-            max_val = max_val > row[0] ? max_val : row[0];
-            max_val = max_val > row[xy_input] ? max_val : row[xy_input];
-            row++;
-
-            // Store the maximum value in the output array
-            *output++ = max_val;
-        }
-    }
-    return output;
-}
-```
+The last piece of the puzzle was to use variable quantization. As shown in the full architecture diagram below, different quantization levels were used for weights and activiation in different layers.
 
 <div align="center">
-    <img src="model_cnn_mcu.png" width="70%"> 
+    <img src="model_cnn_mcu.png" width="80%"> 
 </div>
 
-- Simplified conv2d implementation
-- Variable quantization
+The convolution layers turned out to be very sensitivity to quantization. Better performing models degraded even for 4 bit weights. Luckily, the number of weights in the convolution layers is rather small, so that there is little memory benefit in quantizing to below 8 bit. 
 
+However, the depthwise convolutions they also turned out to be very sensitive to scaling errors in activiations between the channels. In addition, to avoid mismatch between the channels, it was not possible to use normalization between the layers. I therefore opted to keep the activations in full 32 bit resolution and introduce fixed shifts to limite the dynamic range. Only after all channels are processed, quantization of activiations to 8 bit and normalization is performed before feeding the data into the fully connected layers.
 
-- Deep depthwise convolutions
-- In-place processing of channels
+```
+   Layer (type)        Output Shape      Param #      BPW    Bytes # 
+======================================================================== 
+    BitConv2d-1    [-1, 64, 14, 14]          576       8         576
+    BitConv2d-3    [-1, 64, 12, 12]          576       8         576
+    BitConv2d-6      [-1, 64, 4, 4]          576       8         576
+   BitLinear-10            [-1, 96]       24,576       2       6,144
+   BitLinear-12            [-1, 64]        6,144       4       3,072
+   BitLinear-14            [-1, 10]          640       4         320
+========================================================================
+    Total                                 33,088              11,264 
+```
 
+The table above shows all learnable parameters in the model. The first fully connected layer is of size 256x96 and holds the most weights. To reduce memory, I scaled it down to 2 bit weights. Curiously, this did improve performance slightly compared to 4bpw, possibly due to regularization. The last two fully connected layers were kept at 4 bit weights. In total, the model consumes 11kB of flash memory for weights, which is less than needed for the fully connected model and leaves space the the additional inference code.
 
+### Results 
 
+| Configuration | Width | BPW (fc1)| Epochs | Train Accuracy | Test Accuracy | Test Error | Model Size |
+|---------------|-------|--------------|--------|----------------|---------------|------------|------------|
+| 16-wide 2-bit | 16 | 2-bit | 60 | 98.43% | 99.06% | 0.94% | 42,880 bits (5.4 kb)
+| 32-wide 2-bit | 32 | 2-bit | 60 | 99.12% | 99.28% | 0.72% | 58,624 bits (7.3 kB) |
+| 48-wide 2-bit | 48 | 2-bit | 60 | 99.30% | 99.44% | 0.56% | 74,368 bits (9.3 kB) |
+| 64-wide 2-bit | 64 | 2-bit | 60 | 99.40% | *99.53%* | *0.47%* | 90,112 bits (11.0 kB) |
+| 64-wide 4-bit | 64 | 4-bit | 60 | 99.41% | 99.44% | 0.56% | 100,864 bits (12.3 kB) |
+| 64-wide 2-bit (90ep) | 64 | 2-bit | 90 | 99.47% | **99.55%** | **0.45%** | 90,112 bits (11.0 kB) |
+| 80-wide 2-bit (90ep) | 80 | 2-bit | 90 | 99.51% | 99.42% | 0.58% | 105,856 bits (13.2 kB) |
 
+The table above shows the results of different optimization and ablation experiments. Key findings are:
 
-binary
-Total number of bits: 90112 (11.0 kbytes)
+- Quantizing the first fully connected layer to 2 bits vs. 4 bit improves the test performance slightly, possibly due to better regularization. This results is reproducible. Even introducing dropout at various levels did not improve performance of the 4bit quantized model to that of the 2bit model.
+- Increasing the number of channels in the convolution layers improves train accuracy, as expected for a higher capacity model. 
+- The test accuracy is maximized for the 64 wide model and improves slightly with 90 ep training.
+
+A best results of 99.55% test accuracy (0.45% error) was achieved with the 64-wide, 2-bit model trained for 90 epochs. This represents a 0.5% improvement of over the fully connected model and more than halves the test error.
+
+Cross-validation between the quantized and exported 99.53% model was successful as shown below.  Only two mismatches between the Python and C inference engine were found: The C version reduced mispredictions by one, most likely due to numeric differences in the normalization steps.
+
+```
 Verifying inference of quantized model in Python and C
   247 Mismatch between inference engines found. Prediction C: 6 Prediction Python: 2 True: 4
  3023 Mismatch between inference engines found. Prediction C: 8 Prediction Python: 5 True: 8
 size of test data: 10000
 Mispredictions C: 46 Py: 47
-Overall accuracy C: 99.53999999999999 %
+Overall accuracy C: 99.54 %
 Overall accuracy Python: 99.53 %
 Mismatches between engines: 2 (0.02%)
+```
 
-![alt text](image-3.png)
+These results are quite astonishing, especially considering the handycaps of using a 16x16 downsampled dataset, a strongly quantized model and limitations in total weight size and available memory during inference.
 
-64 wide
-2bit mlp
+The error rate is still among the [state-of-the-art for CNN based MNIST](https://en.wikipedia.org/wiki/MNIST_database) and qualifies for a top 100 position in the [ongoing kaggle leaderbeards](https://www.kaggle.com/c/digit-recognizer/leaderboard).
 
-Epoch [1/60], LTrain:0.288631 ATrain: 91.54% LTest:0.069724 ATest: 97.97% Time[s]: 19.72 w_clip/entropy[bits]: 0.614/7.14 0.554/7.24 0.646/7.10 0.137/1.81 0.180/3.71 0.372/3.78 
-Epoch [2/60], LTrain:0.115796 ATrain: 96.40% LTest:0.041229 ATest: 98.74% Time[s]: 19.94 w_clip/entropy[bits]: 0.615/7.21 0.617/7.14 0.730/7.02 0.184/1.77 0.220/3.57 0.426/3.77 
-Epoch [3/60], LTrain:0.085445 ATrain: 97.35% LTest:0.037770 ATest: 98.79% Time[s]: 19.99 w_clip/entropy[bits]: 0.707/7.08 0.668/7.11 0.740/6.98 0.206/1.76 0.246/3.55 0.461/3.76 
-Epoch [4/60], LTrain:0.074113 ATrain: 97.64% LTest:0.038229 ATest: 98.82% Time[s]: 21.50 w_clip/entropy[bits]: 0.690/7.14 0.697/7.07 0.758/7.00 0.226/1.76 0.268/3.53 0.488/3.77 
-Epoch [5/60], LTrain:0.068885 ATrain: 97.84% LTest:0.033097 ATest: 98.86% Time[s]: 22.95 w_clip/entropy[bits]: 0.708/7.11 0.713/7.09 0.809/6.95 0.245/1.77 0.298/3.49 0.534/3.73 
-Epoch [6/60], LTrain:0.063613 ATrain: 98.04% LTest:0.042567 ATest: 98.60% Time[s]: 24.58 w_clip/entropy[bits]: 0.777/6.98 0.789/6.96 0.818/6.91 0.264/1.76 0.315/3.50 0.570/3.69 
-Epoch [7/60], LTrain:0.060857 ATrain: 98.08% LTest:0.035131 ATest: 98.92% Time[s]: 23.10 w_clip/entropy[bits]: 0.794/6.99 0.823/6.97 0.802/7.06 0.282/1.76 0.340/3.48 0.598/3.67 
-Epoch [8/60], LTrain:0.056646 ATrain: 98.23% LTest:0.028163 ATest: 99.03% Time[s]: 23.28 w_clip/entropy[bits]: 0.845/6.92 0.816/7.00 0.830/7.00 0.300/1.75 0.356/3.49 0.624/3.68 
-Epoch [9/60], LTrain:0.055925 ATrain: 98.22% LTest:0.027904 ATest: 99.14% Time[s]: 22.22 w_clip/entropy[bits]: 0.856/6.99 0.856/6.94 0.819/7.00 0.318/1.75 0.372/3.49 0.657/3.65 
-Epoch [10/60], LTrain:0.051715 ATrain: 98.38% LTest:0.032421 ATest: 98.87% Time[s]: 19.61 w_clip/entropy[bits]: 0.901/6.89 0.952/6.86 0.852/6.99 0.332/1.75 0.396/3.47 0.679/3.65 
-Epoch [11/60], LTrain:0.051969 ATrain: 98.36% LTest:0.028341 ATest: 99.07% Time[s]: 18.37 w_clip/entropy[bits]: 0.921/6.86 0.977/6.86 0.871/6.98 0.348/1.75 0.412/3.46 0.699/3.63 
-Epoch [12/60], LTrain:0.049817 ATrain: 98.46% LTest:0.029459 ATest: 99.04% Time[s]: 18.53 w_clip/entropy[bits]: 0.926/6.90 1.007/6.83 0.853/7.01 0.362/1.75 0.422/3.48 0.722/3.62 
-Epoch [13/60], LTrain:0.047917 ATrain: 98.49% LTest:0.025880 ATest: 99.17% Time[s]: 19.15 w_clip/entropy[bits]: 0.924/6.95 1.079/6.76 0.843/7.06 0.377/1.75 0.438/3.47 0.745/3.62 
-Epoch [14/60], LTrain:0.045751 ATrain: 98.53% LTest:0.028785 ATest: 99.13% Time[s]: 19.21 w_clip/entropy[bits]: 0.935/6.91 1.112/6.72 0.932/6.97 0.391/1.75 0.451/3.47 0.772/3.59 
-Epoch [15/60], LTrain:0.045239 ATrain: 98.56% LTest:0.022340 ATest: 99.23% Time[s]: 18.87 w_clip/entropy[bits]: 0.960/6.89 1.133/6.75 0.958/6.97 0.404/1.75 0.462/3.47 0.806/3.57 
-Epoch [16/60], LTrain:0.043792 ATrain: 98.63% LTest:0.023063 ATest: 99.20% Time[s]: 19.60 w_clip/entropy[bits]: 0.902/7.00 1.173/6.71 1.001/6.91 0.417/1.74 0.472/3.48 0.909/3.43 
-Epoch [17/60], LTrain:0.043388 ATrain: 98.62% LTest:0.020957 ATest: 99.37% Time[s]: 18.95 w_clip/entropy[bits]: 0.869/7.06 1.172/6.73 1.020/6.90 0.430/1.74 0.482/3.48 0.997/3.33 
-Epoch [18/60], LTrain:0.040735 ATrain: 98.68% LTest:0.027036 ATest: 99.13% Time[s]: 20.31 w_clip/entropy[bits]: 0.864/7.09 1.205/6.69 1.021/6.91 0.441/1.74 0.494/3.47 1.056/3.28 
-Epoch [19/60], LTrain:0.041058 ATrain: 98.67% LTest:0.024321 ATest: 99.30% Time[s]: 22.64 w_clip/entropy[bits]: 0.920/7.00 1.261/6.67 1.078/6.85 0.454/1.74 0.502/3.47 1.126/3.22 
-Epoch [20/60], LTrain:0.038483 ATrain: 98.77% LTest:0.022144 ATest: 99.32% Time[s]: 20.92 w_clip/entropy[bits]: 0.921/7.03 1.323/6.62 1.120/6.80 0.465/1.73 0.510/3.47 1.170/3.18 
-Epoch [21/60], LTrain:0.039801 ATrain: 98.75% LTest:0.021119 ATest: 99.34% Time[s]: 20.91 w_clip/entropy[bits]: 0.912/7.02 1.404/6.56 1.102/6.84 0.476/1.73 0.518/3.47 1.188/3.18 
-Epoch [22/60], LTrain:0.038029 ATrain: 98.83% LTest:0.021477 ATest: 99.30% Time[s]: 21.19 w_clip/entropy[bits]: 0.924/7.03 1.372/6.60 1.118/6.79 0.485/1.74 0.526/3.47 1.217/3.15 
-Epoch [23/60], LTrain:0.037371 ATrain: 98.79% LTest:0.020470 ATest: 99.31% Time[s]: 25.39 w_clip/entropy[bits]: 0.961/7.00 1.357/6.63 1.128/6.83 0.495/1.73 0.539/3.46 1.252/3.12 
-Epoch [24/60], LTrain:0.035351 ATrain: 98.89% LTest:0.024447 ATest: 99.18% Time[s]: 21.92 w_clip/entropy[bits]: 0.948/7.00 1.400/6.59 1.167/6.79 0.503/1.74 0.544/3.46 1.276/3.11 
-Epoch [25/60], LTrain:0.036360 ATrain: 98.86% LTest:0.021620 ATest: 99.30% Time[s]: 25.13 w_clip/entropy[bits]: 0.925/7.03 1.443/6.58 1.189/6.76 0.512/1.73 0.551/3.47 1.317/3.08 
-Epoch [26/60], LTrain:0.036620 ATrain: 98.84% LTest:0.020044 ATest: 99.40% Time[s]: 24.69 w_clip/entropy[bits]: 0.942/7.05 1.440/6.54 1.175/6.78 0.520/1.73 0.555/3.46 1.358/3.05 
-Epoch [27/60], LTrain:0.034659 ATrain: 98.90% LTest:0.021707 ATest: 99.27% Time[s]: 24.15 w_clip/entropy[bits]: 0.914/7.07 1.430/6.57 1.183/6.79 0.526/1.73 0.561/3.47 1.379/3.03 
-Epoch [28/60], LTrain:0.034221 ATrain: 98.93% LTest:0.020409 ATest: 99.38% Time[s]: 24.84 w_clip/entropy[bits]: 0.950/7.05 1.432/6.59 1.202/6.75 0.533/1.73 0.561/3.47 1.402/3.05 
-Epoch [29/60], LTrain:0.033031 ATrain: 98.95% LTest:0.019548 ATest: 99.41% Time[s]: 24.82 w_clip/entropy[bits]: 0.954/7.05 1.447/6.59 1.199/6.77 0.539/1.73 0.568/3.46 1.403/3.07 
-Epoch [30/60], LTrain:0.031822 ATrain: 98.98% LTest:0.020747 ATest: 99.36% Time[s]: 25.48 w_clip/entropy[bits]: 0.934/7.03 1.473/6.56 1.208/6.77 0.544/1.73 0.575/3.46 1.413/3.06 
-Epoch [31/60], LTrain:0.032101 ATrain: 98.97% LTest:0.019598 ATest: 99.38% Time[s]: 25.37 w_clip/entropy[bits]: 0.947/7.04 1.507/6.53 1.189/6.76 0.550/1.73 0.580/3.45 1.438/3.03 
-Epoch [32/60], LTrain:0.031859 ATrain: 99.02% LTest:0.019532 ATest: 99.41% Time[s]: 25.29 w_clip/entropy[bits]: 0.948/7.03 1.557/6.50 1.188/6.80 0.554/1.73 0.586/3.45 1.453/3.05 
-Epoch [33/60], LTrain:0.031497 ATrain: 98.99% LTest:0.019278 ATest: 99.41% Time[s]: 25.48 w_clip/entropy[bits]: 0.944/7.04 1.575/6.52 1.206/6.79 0.559/1.73 0.589/3.45 1.460/3.06 
-Epoch [34/60], LTrain:0.029945 ATrain: 99.06% LTest:0.021466 ATest: 99.32% Time[s]: 25.52 w_clip/entropy[bits]: 0.955/7.08 1.574/6.49 1.234/6.78 0.563/1.73 0.594/3.44 1.464/3.07 
-Epoch [35/60], LTrain:0.030311 ATrain: 99.07% LTest:0.018872 ATest: 99.51% Time[s]: 25.33 w_clip/entropy[bits]: 0.967/7.01 1.588/6.53 1.229/6.76 0.567/1.73 0.598/3.45 1.491/3.02 
-Epoch [36/60], LTrain:0.028626 ATrain: 99.10% LTest:0.020642 ATest: 99.38% Time[s]: 25.28 w_clip/entropy[bits]: 0.974/7.08 1.575/6.50 1.228/6.75 0.571/1.73 0.600/3.45 1.519/3.00 
-Epoch [37/60], LTrain:0.027847 ATrain: 99.13% LTest:0.019109 ATest: 99.44% Time[s]: 25.38 w_clip/entropy[bits]: 0.979/7.04 1.562/6.51 1.218/6.79 0.574/1.73 0.599/3.45 1.540/2.98 
-Epoch [38/60], LTrain:0.027579 ATrain: 99.16% LTest:0.018988 ATest: 99.47% Time[s]: 25.17 w_clip/entropy[bits]: 1.000/6.98 1.567/6.51 1.239/6.78 0.577/1.73 0.601/3.45 1.552/2.99 
-Epoch [39/60], LTrain:0.027095 ATrain: 99.15% LTest:0.019785 ATest: 99.39% Time[s]: 25.38 w_clip/entropy[bits]: 0.996/7.02 1.561/6.50 1.241/6.76 0.579/1.73 0.605/3.45 1.554/3.01 
-Epoch [40/60], LTrain:0.026628 ATrain: 99.15% LTest:0.017582 ATest: 99.54% Time[s]: 25.10 w_clip/entropy[bits]: 1.003/7.01 1.567/6.50 1.246/6.75 0.581/1.73 0.607/3.44 1.556/3.01 
-Epoch [41/60], LTrain:0.026357 ATrain: 99.18% LTest:0.019496 ATest: 99.45% Time[s]: 25.25 w_clip/entropy[bits]: 1.015/6.99 1.568/6.52 1.255/6.77 0.583/1.73 0.609/3.44 1.561/3.00 
-Epoch [42/60], LTrain:0.025284 ATrain: 99.21% LTest:0.018024 ATest: 99.48% Time[s]: 25.22 w_clip/entropy[bits]: 1.025/7.02 1.580/6.46 1.258/6.71 0.584/1.73 0.611/3.44 1.571/3.00 
-Epoch [43/60], LTrain:0.024707 ATrain: 99.22% LTest:0.017478 ATest: 99.47% Time[s]: 25.22 w_clip/entropy[bits]: 1.035/7.01 1.581/6.50 1.255/6.75 0.586/1.72 0.613/3.44 1.580/2.99 
-Epoch [44/60], LTrain:0.024483 ATrain: 99.23% LTest:0.019240 ATest: 99.35% Time[s]: 25.22 w_clip/entropy[bits]: 1.042/6.97 1.585/6.51 1.270/6.74 0.587/1.73 0.615/3.43 1.587/3.00 
-Epoch [45/60], LTrain:0.024742 ATrain: 99.23% LTest:0.018928 ATest: 99.43% Time[s]: 25.32 w_clip/entropy[bits]: 1.027/6.99 1.587/6.48 1.273/6.72 0.589/1.72 0.615/3.43 1.587/3.01 
-Epoch [46/60], LTrain:0.024214 ATrain: 99.26% LTest:0.019358 ATest: 99.47% Time[s]: 25.21 w_clip/entropy[bits]: 1.020/7.01 1.597/6.48 1.281/6.74 0.589/1.73 0.615/3.43 1.591/3.00 
-Epoch [47/60], LTrain:0.022988 ATrain: 99.27% LTest:0.019183 ATest: 99.41% Time[s]: 25.46 w_clip/entropy[bits]: 1.021/7.02 1.602/6.47 1.294/6.70 0.590/1.72 0.617/3.43 1.597/2.99 
-Epoch [48/60], LTrain:0.023479 ATrain: 99.28% LTest:0.017610 ATest: 99.45% Time[s]: 25.01 w_clip/entropy[bits]: 1.028/7.00 1.604/6.46 1.292/6.69 0.591/1.73 0.617/3.43 1.604/2.99 
-Epoch [49/60], LTrain:0.023090 ATrain: 99.27% LTest:0.016293 ATest: 99.49% Time[s]: 25.22 w_clip/entropy[bits]: 1.024/7.01 1.604/6.46 1.292/6.71 0.592/1.72 0.618/3.43 1.607/2.98 
-Epoch [50/60], LTrain:0.022670 ATrain: 99.29% LTest:0.017558 ATest: 99.46% Time[s]: 25.19 w_clip/entropy[bits]: 1.031/6.99 1.604/6.47 1.296/6.68 0.592/1.72 0.619/3.43 1.610/2.99 
-Epoch [51/60], LTrain:0.022138 ATrain: 99.33% LTest:0.017075 ATest: 99.52% Time[s]: 25.23 w_clip/entropy[bits]: 1.031/6.96 1.611/6.45 1.299/6.70 0.592/1.72 0.619/3.43 1.613/2.99 
-Epoch [52/60], LTrain:0.021627 ATrain: 99.32% LTest:0.016306 ATest: 99.51% Time[s]: 25.01 w_clip/entropy[bits]: 1.029/6.97 1.613/6.45 1.303/6.71 0.593/1.73 0.619/3.43 1.615/2.98 
-Epoch [53/60], LTrain:0.021072 ATrain: 99.34% LTest:0.016790 ATest: 99.55% Time[s]: 25.32 w_clip/entropy[bits]: 1.029/6.94 1.610/6.46 1.304/6.72 0.593/1.73 0.619/3.43 1.616/2.99 
-Epoch [54/60], LTrain:0.021348 ATrain: 99.34% LTest:0.016587 ATest: 99.57% Time[s]: 25.33 w_clip/entropy[bits]: 1.030/6.96 1.613/6.47 1.303/6.70 0.593/1.73 0.619/3.43 1.618/2.98 
-Epoch [55/60], LTrain:0.020614 ATrain: 99.37% LTest:0.016965 ATest: 99.53% Time[s]: 25.05 w_clip/entropy[bits]: 1.030/6.97 1.614/6.46 1.304/6.71 0.593/1.72 0.619/3.43 1.619/2.98 
-Epoch [56/60], LTrain:0.020673 ATrain: 99.38% LTest:0.017001 ATest: 99.52% Time[s]: 25.27 w_clip/entropy[bits]: 1.029/6.97 1.614/6.48 1.305/6.73 0.593/1.73 0.619/3.43 1.620/2.98 
-Epoch [57/60], LTrain:0.020005 ATrain: 99.37% LTest:0.016563 ATest: 99.56% Time[s]: 24.97 w_clip/entropy[bits]: 1.029/6.98 1.613/6.48 1.305/6.74 0.593/1.72 0.619/3.43 1.621/2.98 
-Epoch [58/60], LTrain:0.021023 ATrain: 99.37% LTest:0.016283 ATest: 99.56% Time[s]: 25.12 w_clip/entropy[bits]: 1.029/6.97 1.613/6.48 1.305/6.73 0.593/1.72 0.619/3.43 1.622/2.98 
-Epoch [59/60], LTrain:0.020598 ATrain: 99.38% LTest:0.016470 ATest: 99.55% Time[s]: 25.49 w_clip/entropy[bits]: 1.029/6.97 1.614/6.48 1.305/6.73 0.593/1.72 0.619/3.43 1.622/2.98 
-Epoch [60/60], LTrain:0.020030 ATrain: 99.40% LTest:0.016605 ATest: 99.53% Time[s]: 25.16 w_clip/entropy[bits]: 1.029/6.97 1.614/6.49 1.305/6.73 0.593/1.73 0.619/3.43 1.622/2.98 
-TotalBits: 90112 TotalBytes: 11264.0 
+Pushing the model further proved difficult, as shown below. Walking further down the path of increasing model capacity by increasing the input width beyond 64 and using ternary weight quantization in fc1 for stronger regularization improved test loss, but did not improve accuracy significantly. This suggests that the remaining samples are far out of distribution for the given model.
 
-2bit mlp, 64 wide, 32groups 
+| Configuration             | Width | BPW (fc1) | Epochs | Train Accuracy | Test Accuracy | Test Loss  | Test Error | Model Size                 |
+|---------------------------|-------|-----------|--------|----------------|---------------|------------|------------|---------------------------|
+| 64-wide 2-bit             | 64    | 2-bit     | 60     | 99.40%         | 99.53%        | 0.016605   | 0.47%     | 90,112 bits (11.0 kB) |
+| 80-wide ternary           | 80    | Ternary   | 60     | 99.46%         | 99.52%        | 0.016433   | 0.48%      | 93,568.0 bits (11.42 kB)  |
+| 96-wide ternary           | 96    | Ternary   | 60     | 99.53%         | 99.58%        | 0.016243   | 0.42%      | 106,854.4 bits (13.04 kB) |
+| 96-wide ternary (120 ep)  | 96    | Ternary   | 120    | 99.56%         | **99.58%**        | **0.014558**   | **0.42%**      | 106,854.4 bits (13.04 kB) |
+| 128-wide ternary          | 128   | Ternary   | 60     | 99.51%         | 99.50%        | 0.015868   | 0.50%      | 133,427.2 bits (16.29 kB)
 
-Epoch [1/60], LTrain:0.273525 ATrain: 92.25% LTest:0.060230 ATest: 98.23% Time[s]: 20.05 Act: 44.1% w_clip/entropy[bits]: 0.463/7.43 0.419/7.35 0.451/7.28 0.117/1.89 0.177/3.74 0.416/3.58
-Epoch [2/60], LTrain:0.105200 ATrain: 96.78% LTest:0.041287 ATest: 98.81% Time[s]: 24.16 Act: 43.7% w_clip/entropy[bits]: 0.503/7.37 0.497/7.22 0.493/7.23 0.170/1.82 0.205/3.68 0.488/3.54 
-Epoch [3/60], LTrain:0.079418 ATrain: 97.57% LTest:0.037705 ATest: 98.87% Time[s]: 21.35 Act: 43.4% w_clip/entropy[bits]: 0.534/7.31 0.585/7.07 0.498/7.28 0.190/1.81 0.232/3.63 0.527/3.52 
-Epoch [4/60], LTrain:0.069352 ATrain: 97.84% LTest:0.032338 ATest: 98.98% Time[s]: 22.79 Act: 43.0% w_clip/entropy[bits]: 0.527/7.40 0.670/6.93 0.509/7.30 0.214/1.80 0.255/3.61 0.551/3.54 
-Epoch [5/60], LTrain:0.061584 ATrain: 98.08% LTest:0.037977 ATest: 98.90% Time[s]: 21.91 Act: 44.1% w_clip/entropy[bits]: 0.580/7.31 0.734/6.87 0.580/7.16 0.233/1.79 0.277/3.61 0.572/3.56 
-Epoch [6/60], LTrain:0.057352 ATrain: 98.22% LTest:0.027144 ATest: 99.16% Time[s]: 21.79 Act: 42.7% w_clip/entropy[bits]: 0.603/7.27 0.820/6.76 0.600/7.16 0.251/1.79 0.297/3.60 0.611/3.53 
-Epoch [7/60], LTrain:0.052723 ATrain: 98.32% LTest:0.028632 ATest: 99.14% Time[s]: 22.06 Act: 42.3% w_clip/entropy[bits]: 0.611/7.24 0.892/6.71 0.623/7.15 0.269/1.79 0.322/3.57 0.644/3.53
-Epoch [8/60], LTrain:0.049972 ATrain: 98.42% LTest:0.025402 ATest: 99.27% Time[s]: 22.25 Act: 42.9% w_clip/entropy[bits]: 0.707/7.13 0.876/6.76 0.665/7.09 0.287/1.79 0.346/3.54 0.668/3.52
-Epoch [9/60], LTrain:0.047577 ATrain: 98.53% LTest:0.028691 ATest: 99.03% Time[s]: 22.25 Act: 43.2% w_clip/entropy[bits]: 0.674/7.21 0.931/6.70 0.686/7.13 0.303/1.79 0.365/3.53 0.671/3.57
-Epoch [10/60], LTrain:0.046486 ATrain: 98.52% LTest:0.028094 ATest: 99.11% Time[s]: 22.64 Act: 42.5% w_clip/entropy[bits]: 0.723/7.09 0.961/6.71 0.755/7.01 0.319/1.78 0.384/3.52 0.697/3.54
-Epoch [11/60], LTrain:0.043646 ATrain: 98.62% LTest:0.030345 ATest: 98.97% Time[s]: 21.90 Act: 43.1% w_clip/entropy[bits]: 0.750/7.13 0.984/6.71 0.832/6.91 0.334/1.78 0.401/3.51 0.716/3.56
-Epoch [12/60], LTrain:0.042982 ATrain: 98.63% LTest:0.023258 ATest: 99.35% Time[s]: 21.86 Act: 42.6% w_clip/entropy[bits]: 0.725/7.18 0.990/6.73 0.854/6.93 0.349/1.78 0.420/3.50 0.764/3.50
-Epoch [13/60], LTrain:0.042072 ATrain: 98.67% LTest:0.024620 ATest: 99.20% Time[s]: 21.86 Act: 43.1% w_clip/entropy[bits]: 0.744/7.19 0.960/6.80 0.845/6.96 0.363/1.78 0.435/3.50 0.886/3.34
-Epoch [14/60], LTrain:0.039839 ATrain: 98.76% LTest:0.024670 ATest: 99.29% Time[s]: 21.82 Act: 43.3% w_clip/entropy[bits]: 0.754/7.13 0.955/6.83 0.884/6.92 0.378/1.77 0.450/3.49 0.899/3.36
-Epoch [15/60], LTrain:0.038174 ATrain: 98.82% LTest:0.021619 ATest: 99.32% Time[s]: 21.91 Act: 43.2% w_clip/entropy[bits]: 0.759/7.16 0.956/6.82 0.857/6.97 0.389/1.77 0.464/3.49 0.928/3.34
-Epoch [16/60], LTrain:0.036203 ATrain: 98.85% LTest:0.020627 ATest: 99.27% Time[s]: 22.02 Act: 42.3% w_clip/entropy[bits]: 0.748/7.11 0.958/6.87 0.897/6.94 0.401/1.77 0.476/3.48 0.993/3.27
-Epoch [17/60], LTrain:0.035542 ATrain: 98.88% LTest:0.023734 ATest: 99.26% Time[s]: 21.81 Act: 41.9% w_clip/entropy[bits]: 0.760/7.15 1.004/6.83 0.953/6.85 0.413/1.76 0.486/3.48 1.032/3.24
-Epoch [18/60], LTrain:0.035026 ATrain: 98.90% LTest:0.026374 ATest: 99.19% Time[s]: 21.80 Act: 42.4% w_clip/entropy[bits]: 0.762/7.20 1.033/6.82 0.969/6.85 0.425/1.76 0.496/3.49 1.053/3.25
-Epoch [19/60], LTrain:0.033073 ATrain: 98.96% LTest:0.024281 ATest: 99.33% Time[s]: 22.06 Act: 41.9% w_clip/entropy[bits]: 0.797/7.10 0.993/6.86 1.006/6.83 0.435/1.77 0.510/3.48 1.096/3.22
-Epoch [20/60], LTrain:0.033751 ATrain: 98.92% LTest:0.024293 ATest: 99.27% Time[s]: 21.88 Act: 41.7% w_clip/entropy[bits]: 0.779/7.13 1.006/6.88 1.003/6.84 0.446/1.76 0.518/3.48 1.158/3.17
-Epoch [21/60], LTrain:0.033608 ATrain: 98.95% LTest:0.026419 ATest: 99.15% Time[s]: 21.93 Act: 42.8% w_clip/entropy[bits]: 0.784/7.18 1.020/6.90 1.025/6.83 0.456/1.76 0.526/3.49 1.244/3.08
-Epoch [22/60], LTrain:0.031409 ATrain: 99.00% LTest:0.026212 ATest: 99.26% Time[s]: 22.03 Act: 42.3% w_clip/entropy[bits]: 0.814/7.13 1.031/6.89 1.059/6.81 0.464/1.77 0.532/3.49 1.321/3.00
-Epoch [23/60], LTrain:0.030354 ATrain: 99.03% LTest:0.024880 ATest: 99.33% Time[s]: 21.91 Act: 42.3% w_clip/entropy[bits]: 0.809/7.14 1.057/6.85 1.074/6.80 0.473/1.76 0.537/3.50 1.425/2.90
-Epoch [24/60], LTrain:0.030384 ATrain: 99.04% LTest:0.023306 ATest: 99.38% Time[s]: 22.03 Act: 42.6% w_clip/entropy[bits]: 0.870/7.05 1.051/6.88 1.104/6.77 0.481/1.76 0.548/3.48 1.458/2.90
-Epoch [25/60], LTrain:0.029590 ATrain: 99.07% LTest:0.021693 ATest: 99.32% Time[s]: 21.98 Act: 43.4% w_clip/entropy[bits]: 0.855/7.05 1.064/6.88 1.085/6.80 0.487/1.76 0.559/3.47 1.480/2.90
-Epoch [26/60], LTrain:0.030110 ATrain: 99.08% LTest:0.024466 ATest: 99.25% Time[s]: 21.97 Act: 42.6% w_clip/entropy[bits]: 0.875/7.09 1.102/6.83 1.095/6.79 0.495/1.76 0.563/3.48 1.517/2.89
-Epoch [27/60], LTrain:0.029005 ATrain: 99.06% LTest:0.020697 ATest: 99.32% Time[s]: 23.85 Act: 42.4% w_clip/entropy[bits]: 0.852/7.10 1.099/6.86 1.148/6.76 0.501/1.76 0.572/3.47 1.568/2.86
-Epoch [28/60], LTrain:0.027700 ATrain: 99.10% LTest:0.025305 ATest: 99.26% Time[s]: 23.70 Act: 43.0% w_clip/entropy[bits]: 0.839/7.11 1.105/6.86 1.160/6.75 0.507/1.76 0.580/3.46 1.607/2.82
-Epoch [29/60], LTrain:0.027948 ATrain: 99.13% LTest:0.021930 ATest: 99.34% Time[s]: 22.98 Act: 43.1% w_clip/entropy[bits]: 0.843/7.13 1.106/6.85 1.146/6.76 0.513/1.76 0.589/3.45 1.675/2.78
-Epoch [30/60], LTrain:0.026948 ATrain: 99.16% LTest:0.020657 ATest: 99.32% Time[s]: 22.34 Act: 42.2% w_clip/entropy[bits]: 0.864/7.11 1.108/6.87 1.154/6.77 0.519/1.76 0.597/3.45 1.760/2.73
-Epoch [31/60], LTrain:0.025668 ATrain: 99.18% LTest:0.021076 ATest: 99.43% Time[s]: 22.63 Act: 42.4% w_clip/entropy[bits]: 0.879/7.10 1.125/6.88 1.167/6.76 0.524/1.76 0.600/3.45 1.842/2.67
-Epoch [32/60], LTrain:0.026964 ATrain: 99.15% LTest:0.019549 ATest: 99.40% Time[s]: 22.87 Act: 42.9% w_clip/entropy[bits]: 0.869/7.12 1.133/6.83 1.154/6.78 0.528/1.76 0.605/3.45 1.906/2.64
-Epoch [33/60], LTrain:0.025921 ATrain: 99.20% LTest:0.025913 ATest: 99.21% Time[s]: 21.89 Act: 43.1% w_clip/entropy[bits]: 0.849/7.18 1.176/6.81 1.162/6.77 0.532/1.76 0.610/3.45 1.951/2.62
-Epoch [34/60], LTrain:0.023480 ATrain: 99.26% LTest:0.021405 ATest: 99.39% Time[s]: 21.56 Act: 43.1% w_clip/entropy[bits]: 0.861/7.13 1.188/6.79 1.157/6.78 0.536/1.76 0.615/3.44 1.958/2.65
-Epoch [35/60], LTrain:0.023950 ATrain: 99.23% LTest:0.022371 ATest: 99.34% Time[s]: 21.81 Act: 42.8% w_clip/entropy[bits]: 0.863/7.15 1.209/6.77 1.171/6.76 0.538/1.76 0.621/3.43 1.969/2.65
-Epoch [36/60], LTrain:0.024283 ATrain: 99.26% LTest:0.023138 ATest: 99.33% Time[s]: 21.74 Act: 43.4% w_clip/entropy[bits]: 0.864/7.17 1.188/6.78 1.186/6.77 0.541/1.76 0.625/3.43 1.983/2.63
-Epoch [37/60], LTrain:0.024043 ATrain: 99.25% LTest:0.023401 ATest: 99.32% Time[s]: 21.63 Act: 43.0% w_clip/entropy[bits]: 0.868/7.15 1.207/6.77 1.180/6.75 0.543/1.76 0.627/3.43 2.010/2.63
-Epoch [45/60], LTrain:0.020375 ATrain: 99.38% LTest:0.020354 ATest: 99.36% Time[s]: 21.48 Act: 42.6% w_clip/entropy[bits]: 0.885/7.10 1.217/6.77 1.198/6.76 0.556/1.76 0.640/3.42 2.227/2.50      
-Epoch [46/60], LTrain:0.019441 ATrain: 99.38% LTest:0.018541 ATest: 99.44% Time[s]: 21.62 Act: 42.6% w_clip/entropy[bits]: 0.879/7.14 1.218/6.78 1.203/6.74 0.557/1.76 0.642/3.42 2.234/2.50      
-Epoch [47/60], LTrain:0.019504 ATrain: 99.39% LTest:0.017577 ATest: 99.41% Time[s]: 21.69 Act: 42.7% w_clip/entropy[bits]: 0.878/7.16 1.223/6.77 1.201/6.75 0.557/1.76 0.643/3.42 2.242/2.50      
-Epoch [48/60], LTrain:0.018456 ATrain: 99.43% LTest:0.016583 ATest: 99.47% Time[s]: 21.46 Act: 42.7% w_clip/entropy[bits]: 0.880/7.13 1.228/6.76 1.205/6.74 0.558/1.76 0.643/3.42 2.249/2.49      
-Epoch [49/60], LTrain:0.018686 ATrain: 99.42% LTest:0.018517 ATest: 99.44% Time[s]: 21.64 Act: 42.7% w_clip/entropy[bits]: 0.887/7.13 1.225/6.78 1.204/6.73 0.558/1.76 0.643/3.42 2.258/2.48      
-Epoch [50/60], LTrain:0.018177 ATrain: 99.43% LTest:0.019077 ATest: 99.45% Time[s]: 21.56 Act: 42.6% w_clip/entropy[bits]: 0.882/7.15 1.231/6.76 1.203/6.74 0.559/1.76 0.644/3.42 2.262/2.48      
-Epoch [51/60], LTrain:0.018281 ATrain: 99.44% LTest:0.018007 ATest: 99.45% Time[s]: 21.84 Act: 42.7% w_clip/entropy[bits]: 0.883/7.14 1.229/6.77 1.197/6.74 0.559/1.75 0.644/3.42 2.264/2.50      
-Epoch [52/60], LTrain:0.018547 ATrain: 99.44% LTest:0.018670 ATest: 99.45% Time[s]: 21.87 Act: 42.7% w_clip/entropy[bits]: 0.886/7.12 1.232/6.76 1.201/6.74 0.559/1.75 0.644/3.42 2.266/2.50      
-Epoch [53/60], LTrain:0.017670 ATrain: 99.44% LTest:0.018805 ATest: 99.43% Time[s]: 19.19 Act: 42.7% w_clip/entropy[bits]: 0.886/7.12 1.233/6.75 1.202/6.74 0.559/1.75 0.644/3.42 2.270/2.49      
-Epoch [54/60], LTrain:0.017283 ATrain: 99.45% LTest:0.017706 ATest: 99.44% Time[s]: 19.08 Act: 42.7% w_clip/entropy[bits]: 0.888/7.14 1.233/6.76 1.202/6.74 0.559/1.75 0.644/3.42 2.273/2.49      
-Epoch [55/60], LTrain:0.016962 ATrain: 99.48% LTest:0.017886 ATest: 99.44% Time[s]: 19.61 Act: 42.7% w_clip/entropy[bits]: 0.888/7.14 1.233/6.76 1.203/6.74 0.560/1.75 0.644/3.42 2.274/2.49      
-Epoch [56/60], LTrain:0.016163 ATrain: 99.50% LTest:0.017486 ATest: 99.49% Time[s]: 19.16 Act: 42.7% w_clip/entropy[bits]: 0.888/7.11 1.234/6.76 1.203/6.73 0.560/1.75 0.644/3.42 2.275/2.49      
-Epoch [57/60], LTrain:0.016734 ATrain: 99.49% LTest:0.017488 ATest: 99.51% Time[s]: 19.12 Act: 42.7% w_clip/entropy[bits]: 0.888/7.12 1.233/6.76 1.203/6.72 0.560/1.76 0.644/3.42 2.275/2.49      
-Epoch [58/60], LTrain:0.015859 ATrain: 99.50% LTest:0.017606 ATest: 99.50% Time[s]: 19.19 Act: 42.7% w_clip/entropy[bits]: 0.888/7.12 1.233/6.76 1.203/6.72 0.560/1.75 0.644/3.42 2.275/2.49      
-Epoch [59/60], LTrain:0.016334 ATrain: 99.47% LTest:0.017491 ATest: 99.50% Time[s]: 23.31 Act: 42.7% w_clip/entropy[bits]: 0.888/7.12 1.233/6.76 1.203/6.72 0.560/1.76 0.644/3.42 2.276/2.49 
-Epoch [60/60], LTrain:0.015753 ATrain: 99.52% LTest:0.017618 ATest: 99.49% Time[s]: 24.98 Act: 42.7% w_clip/entropy[bits]: 0.888/7.12 1.233/6.76 1.203/6.72 0.560/1.76 0.644/3.42 2.276/2.49 
-TotalBits: 99328 TotalBytes: 12416.0 
-saving model...
+Experiments with further data augmentation (elastic distortions, random erasing) did not improve performance. Neither did switching to a fully connected CNN architecture with more parameters and dropout. Increasing the input size to 28x28 also did not significantly improved performance. Possibly ensemble methods or a much higher capacity model coupled with a different regularization scheme would be required to push the error rate further down.
 
-2bit mlp, 64 wide, 16 groups
-Epoch [1/60], LTrain:0.269279 ATrain: 92.32% LTest:0.059375 ATest: 98.26% Time[s]: 24.33 Act: 43.8% w_clip/entropy[bits]: 0.457/7.44 0.349/7.26 0.406/7.09 0.114/1.89 0.175/3.76 0.363/3.77 
-Epoch [2/60], LTrain:0.098340 ATrain: 96.97% LTest:0.035143 ATest: 98.84% Time[s]: 25.56 Act: 43.0% w_clip/entropy[bits]: 0.506/7.38 0.391/7.20 0.457/7.01 0.162/1.82 0.204/3.68 0.410/3.77 
-Epoch [3/60], LTrain:0.076069 ATrain: 97.66% LTest:0.032445 ATest: 99.06% Time[s]: 25.44 Act: 42.3% w_clip/entropy[bits]: 0.522/7.35 0.431/7.16 0.466/7.08 0.182/1.82 0.228/3.65 0.433/3.81 
-Epoch [4/60], LTrain:0.064147 ATrain: 98.00% LTest:0.031866 ATest: 99.06% Time[s]: 25.33 Act: 41.6% w_clip/entropy[bits]: 0.577/7.28 0.459/7.15 0.501/7.05 0.202/1.81 0.250/3.64 0.468/3.79 
-Epoch [5/60], LTrain:0.057827 ATrain: 98.24% LTest:0.029451 ATest: 99.01% Time[s]: 25.28 Act: 41.8% w_clip/entropy[bits]: 0.610/7.17 0.490/7.14 0.492/7.16 0.221/1.81 0.274/3.61 0.502/3.77 
-Epoch [6/60], LTrain:0.053995 ATrain: 98.33% LTest:0.032041 ATest: 99.04% Time[s]: 25.21 Act: 40.4% w_clip/entropy[bits]: 0.600/7.25 0.533/7.10 0.555/7.05 0.239/1.80 0.295/3.60 0.557/3.70 
-Epoch [7/60], LTrain:0.050881 ATrain: 98.44% LTest:0.033054 ATest: 98.93% Time[s]: 26.04 Act: 41.6% w_clip/entropy[bits]: 0.655/7.17 0.572/7.05 0.578/7.07 0.257/1.80 0.315/3.59 0.590/3.67 
-Epoch [8/60], LTrain:0.046691 ATrain: 98.55% LTest:0.031144 ATest: 99.02% Time[s]: 24.47 Act: 41.1% w_clip/entropy[bits]: 0.658/7.17 0.650/6.94 0.604/7.06 0.275/1.79 0.335/3.57 0.622/3.64 
-Epoch [9/60], LTrain:0.044277 ATrain: 98.66% LTest:0.028626 ATest: 99.15% Time[s]: 25.88 Act: 42.1% w_clip/entropy[bits]: 0.643/7.19 0.678/6.92 0.656/7.00 0.290/1.80 0.352/3.57 0.630/3.65 
-Epoch [10/60], LTrain:0.042684 ATrain: 98.69% LTest:0.028422 ATest: 99.13% Time[s]: 24.46 Act: 40.4% w_clip/entropy[bits]: 0.645/7.25 0.787/6.78 0.654/7.05 0.305/1.80 0.373/3.55 0.653/3.61 
-Epoch [11/60], LTrain:0.040245 ATrain: 98.72% LTest:0.026073 ATest: 99.26% Time[s]: 25.61 Act: 39.7% w_clip/entropy[bits]: 0.663/7.28 0.805/6.78 0.728/6.95 0.320/1.80 0.385/3.56 0.665/3.63 
-Epoch [12/60], LTrain:0.039176 ATrain: 98.77% LTest:0.026877 ATest: 99.28% Time[s]: 25.03 Act: 40.6% w_clip/entropy[bits]: 0.703/7.17 0.790/6.86 0.786/6.88 0.333/1.80 0.401/3.55 0.696/3.60 
-Epoch [13/60], LTrain:0.037648 ATrain: 98.84% LTest:0.025965 ATest: 99.17% Time[s]: 26.51 Act: 41.0% w_clip/entropy[bits]: 0.705/7.20 0.793/6.89 0.830/6.82 0.347/1.79 0.418/3.53 0.735/3.56 
-Epoch [14/60], LTrain:0.035475 ATrain: 98.91% LTest:0.020008 ATest: 99.43% Time[s]: 25.41 Act: 39.9% w_clip/entropy[bits]: 0.735/7.13 0.859/6.82 0.841/6.85 0.359/1.79 0.429/3.54 0.756/3.54 
-Epoch [15/60], LTrain:0.035943 ATrain: 98.88% LTest:0.022798 ATest: 99.32% Time[s]: 25.45 Act: 40.8% w_clip/entropy[bits]: 0.732/7.21 0.871/6.83 0.882/6.82 0.370/1.80 0.442/3.53 0.780/3.52 
-Epoch [16/60], LTrain:0.034256 ATrain: 98.93% LTest:0.022956 ATest: 99.28% Time[s]: 25.78 Act: 40.7% w_clip/entropy[bits]: 0.713/7.21 0.834/6.91 0.889/6.83 0.382/1.79 0.453/3.53 0.800/3.52 
-Epoch [17/60], LTrain:0.032555 ATrain: 98.95% LTest:0.023857 ATest: 99.25% Time[s]: 26.27 Act: 40.1% w_clip/entropy[bits]: 0.747/7.19 0.875/6.88 0.953/6.76 0.394/1.79 0.468/3.51 0.814/3.52 
-Epoch [18/60], LTrain:0.032119 ATrain: 99.01% LTest:0.024356 ATest: 99.22% Time[s]: 25.49 Act: 39.8% w_clip/entropy[bits]: 0.726/7.26 0.878/6.87 0.960/6.78 0.405/1.79 0.474/3.53 0.814/3.54 
-Epoch [19/60], LTrain:0.029840 ATrain: 99.03% LTest:0.020973 ATest: 99.37% Time[s]: 25.70 Act: 39.9% w_clip/entropy[bits]: 0.754/7.17 0.871/6.92 0.945/6.81 0.414/1.79 0.484/3.52 0.846/3.52 
-Epoch [20/60], LTrain:0.029547 ATrain: 99.08% LTest:0.022521 ATest: 99.31% Time[s]: 26.24 Act: 39.6% w_clip/entropy[bits]: 0.741/7.23 0.905/6.90 0.964/6.81 0.424/1.79 0.490/3.53 0.874/3.50 
-Epoch [21/60], LTrain:0.030468 ATrain: 99.06% LTest:0.027751 ATest: 99.22% Time[s]: 25.47 Act: 40.1% w_clip/entropy[bits]: 0.744/7.25 0.923/6.88 0.966/6.82 0.433/1.78 0.500/3.52 0.909/3.45 
-Epoch [22/60], LTrain:0.028343 ATrain: 99.11% LTest:0.024082 ATest: 99.26% Time[s]: 24.83 Act: 40.2% w_clip/entropy[bits]: 0.767/7.23 0.972/6.82 0.992/6.80 0.442/1.78 0.511/3.52 0.949/3.40 
-Epoch [23/60], LTrain:0.029168 ATrain: 99.09% LTest:0.022666 ATest: 99.33% Time[s]: 24.78 Act: 39.7% w_clip/entropy[bits]: 0.777/7.22 0.979/6.84 1.022/6.77 0.449/1.78 0.520/3.51 0.966/3.40 
-Epoch [24/60], LTrain:0.027934 ATrain: 99.14% LTest:0.021162 ATest: 99.41% Time[s]: 26.02 Act: 40.0% w_clip/entropy[bits]: 0.763/7.23 1.024/6.79 1.051/6.74 0.456/1.78 0.530/3.50 0.985/3.38 
-Epoch [25/60], LTrain:0.026325 ATrain: 99.14% LTest:0.023898 ATest: 99.28% Time[s]: 25.25 Act: 39.8% w_clip/entropy[bits]: 0.770/7.19 1.040/6.78 1.071/6.74 0.463/1.78 0.539/3.50 1.020/3.36 
-Epoch [26/60], LTrain:0.027008 ATrain: 99.13% LTest:0.019793 ATest: 99.33% Time[s]: 25.15 Act: 39.7% w_clip/entropy[bits]: 0.792/7.21 1.060/6.77 1.096/6.71 0.469/1.79 0.543/3.50 1.042/3.34 
-Epoch [27/60], LTrain:0.025417 ATrain: 99.22% LTest:0.022236 ATest: 99.37% Time[s]: 24.95 Act: 39.5% w_clip/entropy[bits]: 0.801/7.16 1.068/6.78 1.101/6.71 0.475/1.78 0.549/3.50 1.087/3.30 
-Epoch [28/60], LTrain:0.024982 ATrain: 99.20% LTest:0.020888 ATest: 99.39% Time[s]: 26.18 Act: 40.6% w_clip/entropy[bits]: 0.782/7.20 1.088/6.75 1.109/6.72 0.481/1.78 0.557/3.50 1.127/3.28 
-Epoch [29/60], LTrain:0.024120 ATrain: 99.24% LTest:0.018896 ATest: 99.47% Time[s]: 24.09 Act: 40.4% w_clip/entropy[bits]: 0.802/7.19 1.121/6.72 1.104/6.74 0.486/1.79 0.562/3.50 1.148/3.25 
-Epoch [30/60], LTrain:0.023718 ATrain: 99.24% LTest:0.020925 ATest: 99.38% Time[s]: 24.34 Act: 39.7% w_clip/entropy[bits]: 0.812/7.20 1.142/6.71 1.099/6.76 0.490/1.78 0.570/3.49 1.167/3.24 
-Epoch [31/60], LTrain:0.023016 ATrain: 99.29% LTest:0.020033 ATest: 99.41% Time[s]: 25.70 Act: 39.5% w_clip/entropy[bits]: 0.832/7.15 1.155/6.70 1.056/6.82 0.495/1.78 0.573/3.49 1.176/3.23 
-Epoch [32/60], LTrain:0.023625 ATrain: 99.26% LTest:0.020646 ATest: 99.44% Time[s]: 25.93 Act: 40.1% w_clip/entropy[bits]: 0.837/7.14 1.142/6.72 1.048/6.83 0.499/1.78 0.576/3.49 1.190/3.21 
-Epoch [33/60], LTrain:0.022533 ATrain: 99.30% LTest:0.021614 ATest: 99.40% Time[s]: 24.15 Act: 40.5% w_clip/entropy[bits]: 0.826/7.17 1.172/6.69 1.060/6.82 0.502/1.78 0.582/3.48 1.218/3.19 
-Epoch [34/60], LTrain:0.021394 ATrain: 99.34% LTest:0.020514 ATest: 99.41% Time[s]: 24.40 Act: 40.1% w_clip/entropy[bits]: 0.825/7.22 1.149/6.72 1.062/6.83 0.505/1.78 0.586/3.48 1.245/3.18 
-Epoch [35/60], LTrain:0.021459 ATrain: 99.32% LTest:0.019765 ATest: 99.47% Time[s]: 22.10 Act: 39.8% w_clip/entropy[bits]: 0.813/7.23 1.109/6.78 1.053/6.84 0.508/1.78 0.589/3.48 1.275/3.14 
-Epoch [36/60], LTrain:0.021134 ATrain: 99.35% LTest:0.019551 ATest: 99.43% Time[s]: 23.50 Act: 40.1% w_clip/entropy[bits]: 0.833/7.21 1.119/6.76 1.076/6.82 0.511/1.79 0.591/3.48 1.296/3.13 
-Epoch [37/60], LTrain:0.020473 ATrain: 99.37% LTest:0.020351 ATest: 99.42% Time[s]: 22.97 Act: 40.2% w_clip/entropy[bits]: 0.835/7.20 1.133/6.75 1.082/6.80 0.513/1.78 0.592/3.49 1.300/3.15 
-Epoch [38/60], LTrain:0.019334 ATrain: 99.40% LTest:0.019622 ATest: 99.46% Time[s]: 23.61 Act: 40.2% w_clip/entropy[bits]: 0.837/7.14 1.151/6.73 1.086/6.81 0.516/1.78 0.592/3.49 1.313/3.14 
-Epoch [39/60], LTrain:0.020049 ATrain: 99.38% LTest:0.020373 ATest: 99.43% Time[s]: 23.12 Act: 40.2% w_clip/entropy[bits]: 0.832/7.14 1.162/6.72 1.083/6.80 0.518/1.78 0.595/3.48 1.330/3.12 
-Epoch [40/60], LTrain:0.018939 ATrain: 99.42% LTest:0.018541 ATest: 99.49% Time[s]: 22.17 Act: 40.7% w_clip/entropy[bits]: 0.822/7.21 1.179/6.71 1.093/6.80 0.520/1.78 0.595/3.49 1.352/3.11 
-Epoch [41/60], LTrain:0.018870 ATrain: 99.42% LTest:0.019693 ATest: 99.45% Time[s]: 23.03 Act: 40.7% w_clip/entropy[bits]: 0.814/7.20 1.188/6.70 1.098/6.79 0.522/1.78 0.595/3.49 1.386/3.09 
-Epoch [42/60], LTrain:0.018644 ATrain: 99.44% LTest:0.019467 ATest: 99.42% Time[s]: 22.01 Act: 40.6% w_clip/entropy[bits]: 0.820/7.19 1.186/6.70 1.098/6.79 0.523/1.78 0.598/3.49 1.405/3.08 
-Epoch [43/60], LTrain:0.018130 ATrain: 99.47% LTest:0.018492 ATest: 99.47% Time[s]: 22.10 Act: 40.3% w_clip/entropy[bits]: 0.831/7.17 1.189/6.70 1.091/6.80 0.524/1.78 0.599/3.48 1.423/3.05 
-Epoch [44/60], LTrain:0.017113 ATrain: 99.49% LTest:0.018650 ATest: 99.48% Time[s]: 21.99 Act: 40.4% w_clip/entropy[bits]: 0.832/7.19 1.199/6.69 1.090/6.81 0.525/1.78 0.602/3.48 1.435/3.04 
-Epoch [45/60], LTrain:0.017323 ATrain: 99.47% LTest:0.016487 ATest: 99.56% Time[s]: 21.81 Act: 40.3% w_clip/entropy[bits]: 0.836/7.20 1.186/6.70 1.094/6.80 0.526/1.78 0.602/3.48 1.438/3.04 
-Epoch [46/60], LTrain:0.017561 ATrain: 99.47% LTest:0.017670 ATest: 99.46% Time[s]: 23.09 Act: 40.0% w_clip/entropy[bits]: 0.830/7.17 1.192/6.69 1.084/6.81 0.526/1.78 0.603/3.48 1.439/3.04 
-Epoch [47/60], LTrain:0.016723 ATrain: 99.46% LTest:0.019758 ATest: 99.44% Time[s]: 24.26 Act: 40.1% w_clip/entropy[bits]: 0.834/7.22 1.183/6.71 1.087/6.82 0.527/1.78 0.603/3.49 1.441/3.05 
-Epoch [48/60], LTrain:0.015127 ATrain: 99.52% LTest:0.018027 ATest: 99.53% Time[s]: 23.02 Act: 40.0% w_clip/entropy[bits]: 0.836/7.21 1.186/6.71 1.087/6.81 0.527/1.78 0.604/3.48 1.442/3.05 
-Epoch [49/60], LTrain:0.015221 ATrain: 99.53% LTest:0.017867 ATest: 99.55% Time[s]: 24.55 Act: 40.1% w_clip/entropy[bits]: 0.832/7.18 1.177/6.72 1.092/6.81 0.528/1.78 0.604/3.48 1.442/3.05 
-Epoch [50/60], LTrain:0.015978 ATrain: 99.52% LTest:0.017262 ATest: 99.53% Time[s]: 23.65 Act: 39.9% w_clip/entropy[bits]: 0.831/7.21 1.176/6.72 1.095/6.81 0.528/1.78 0.604/3.48 1.444/3.06 
-Epoch [51/60], LTrain:0.015425 ATrain: 99.51% LTest:0.016422 ATest: 99.53% Time[s]: 23.86 Act: 40.2% w_clip/entropy[bits]: 0.830/7.16 1.181/6.71 1.097/6.81 0.528/1.78 0.604/3.48 1.444/3.07 
-Epoch [52/60], LTrain:0.015214 ATrain: 99.53% LTest:0.017965 ATest: 99.56% Time[s]: 23.93 Act: 40.5% w_clip/entropy[bits]: 0.832/7.14 1.183/6.71 1.099/6.80 0.529/1.78 0.605/3.48 1.445/3.06 
-Epoch [53/60], LTrain:0.014316 ATrain: 99.57% LTest:0.017512 ATest: 99.52% Time[s]: 23.61 Act: 40.2% w_clip/entropy[bits]: 0.833/7.17 1.187/6.71 1.096/6.81 0.529/1.78 0.605/3.48 1.447/3.07 
-Epoch [54/60], LTrain:0.014976 ATrain: 99.53% LTest:0.016840 ATest: 99.54% Time[s]: 23.83 Act: 40.2% w_clip/entropy[bits]: 0.832/7.20 1.189/6.71 1.094/6.81 0.529/1.78 0.605/3.48 1.448/3.06 
-Epoch [55/60], LTrain:0.013901 ATrain: 99.58% LTest:0.016850 ATest: 99.52% Time[s]: 23.95 Act: 40.2% w_clip/entropy[bits]: 0.833/7.16 1.189/6.70 1.095/6.81 0.529/1.78 0.605/3.48 1.450/3.05 
-Epoch [56/60], LTrain:0.013687 ATrain: 99.56% LTest:0.016479 ATest: 99.49% Time[s]: 23.85 Act: 40.2% w_clip/entropy[bits]: 0.833/7.15 1.189/6.70 1.095/6.81 0.529/1.78 0.605/3.48 1.452/3.05 
-Epoch [57/60], LTrain:0.014033 ATrain: 99.57% LTest:0.016592 ATest: 99.55% Time[s]: 23.65 Act: 40.4% w_clip/entropy[bits]: 0.834/7.15 1.189/6.70 1.096/6.81 0.529/1.78 0.605/3.48 1.452/3.05 
-Epoch [58/60], LTrain:0.013978 ATrain: 99.56% LTest:0.016925 ATest: 99.52% Time[s]: 23.57 Act: 40.3% w_clip/entropy[bits]: 0.834/7.14 1.189/6.70 1.096/6.81 0.529/1.78 0.605/3.48 1.452/3.05 
-Epoch [59/60], LTrain:0.013760 ATrain: 99.57% LTest:0.016907 ATest: 99.52% Time[s]: 22.68 Act: 40.4% w_clip/entropy[bits]: 0.834/7.15 1.189/6.70 1.096/6.81 0.529/1.78 0.605/3.48 1.453/3.05 
-Epoch [60/60], LTrain:0.013327 ATrain: 99.58% LTest:0.016684 ATest: 99.53% Time[s]: 22.31 Act: 40.4% w_clip/entropy[bits]: 0.834/7.15 1.189/6.70 1.096/6.81 0.529/1.78 0.605/3.48 1.453/3.05 
-TotalBits: 117760 TotalBytes: 14720.0 
-
-4bit mlp
-
-training...
-Epoch [1/60], LTrain:0.280140 ATrain: 92.02% LTest:0.073800 ATest: 97.80% Time[s]: 26.84 w_clip/entropy[bits]: 0.499/7.40 0.496/7.37 0.488/7.39 0.190/3.35 0.170/3.78 0.357/3.75 
-Epoch [2/60], LTrain:0.107413 ATrain: 96.71% LTest:0.044789 ATest: 98.73% Time[s]: 24.21 w_clip/entropy[bits]: 0.613/7.17 0.548/7.32 0.568/7.23 0.239/3.22 0.209/3.63 0.405/3.74 
-Epoch [3/60], LTrain:0.082888 ATrain: 97.45% LTest:0.039449 ATest: 98.77% Time[s]: 24.71 w_clip/entropy[bits]: 0.603/7.19 0.666/7.12 0.602/7.22 0.277/3.16 0.236/3.58 0.430/3.78 
-Epoch [4/60], LTrain:0.073855 ATrain: 97.69% LTest:0.030664 ATest: 99.14% Time[s]: 24.38 w_clip/entropy[bits]: 0.583/7.28 0.690/7.15 0.649/7.17 0.312/3.13 0.263/3.53 0.466/3.75 
-Epoch [5/60], LTrain:0.065570 ATrain: 97.99% LTest:0.030656 ATest: 99.11% Time[s]: 24.60 w_clip/entropy[bits]: 0.575/7.35 0.711/7.09 0.695/7.09 0.344/3.09 0.287/3.51 0.499/3.73 
-Epoch [6/60], LTrain:0.060853 ATrain: 98.11% LTest:0.031569 ATest: 99.03% Time[s]: 24.20 w_clip/entropy[bits]: 0.627/7.31 0.780/7.01 0.728/7.06 0.377/3.07 0.306/3.49 0.523/3.72 
-Epoch [7/60], LTrain:0.055810 ATrain: 98.25% LTest:0.030277 ATest: 99.09% Time[s]: 23.85 w_clip/entropy[bits]: 0.641/7.30 0.831/6.97 0.751/7.00 0.404/3.06 0.325/3.48 0.549/3.71 
-Epoch [8/60], LTrain:0.053166 ATrain: 98.32% LTest:0.025180 ATest: 99.23% Time[s]: 23.55 w_clip/entropy[bits]: 0.662/7.26 0.985/6.81 0.784/7.06 0.432/3.04 0.343/3.47 0.582/3.68 
-Epoch [9/60], LTrain:0.050875 ATrain: 98.43% LTest:0.023232 ATest: 99.26% Time[s]: 26.70 w_clip/entropy[bits]: 0.678/7.23 1.038/6.79 0.852/6.94 0.456/3.03 0.364/3.46 0.620/3.64 
-Epoch [10/60], LTrain:0.050411 ATrain: 98.44% LTest:0.029316 ATest: 99.12% Time[s]: 25.87 w_clip/entropy[bits]: 0.684/7.31 1.071/6.79 0.865/6.94 0.481/3.02 0.375/3.46 0.685/3.56 
-Epoch [11/60], LTrain:0.047499 ATrain: 98.54% LTest:0.027159 ATest: 99.15% Time[s]: 27.05 w_clip/entropy[bits]: 0.690/7.23 1.135/6.65 0.890/6.92 0.506/3.00 0.399/3.42 0.720/3.51 
-Epoch [12/60], LTrain:0.044584 ATrain: 98.58% LTest:0.025023 ATest: 99.25% Time[s]: 26.43 w_clip/entropy[bits]: 0.678/7.28 1.153/6.70 0.996/6.76 0.526/2.99 0.416/3.41 0.766/3.48 
-Epoch [13/60], LTrain:0.044200 ATrain: 98.58% LTest:0.025280 ATest: 99.19% Time[s]: 24.94 w_clip/entropy[bits]: 0.678/7.30 1.167/6.68 1.045/6.77 0.547/2.98 0.428/3.42 0.854/3.38 
-Epoch [14/60], LTrain:0.041521 ATrain: 98.72% LTest:0.028101 ATest: 99.16% Time[s]: 26.12 w_clip/entropy[bits]: 0.680/7.31 1.172/6.72 1.039/6.77 0.565/2.98 0.441/3.41 0.971/3.22 
-Epoch [15/60], LTrain:0.040717 ATrain: 98.72% LTest:0.027857 ATest: 99.13% Time[s]: 24.50 w_clip/entropy[bits]: 0.718/7.28 1.243/6.66 1.080/6.75 0.584/2.97 0.455/3.40 1.150/3.01 
-Epoch [16/60], LTrain:0.038832 ATrain: 98.82% LTest:0.021329 ATest: 99.27% Time[s]: 26.28 w_clip/entropy[bits]: 0.739/7.23 1.314/6.58 1.057/6.80 0.602/2.96 0.465/3.41 1.325/2.87 
-Epoch [17/60], LTrain:0.038318 ATrain: 98.82% LTest:0.022265 ATest: 99.32% Time[s]: 24.05 w_clip/entropy[bits]: 0.753/7.27 1.342/6.54 1.062/6.83 0.616/2.96 0.472/3.42 1.427/2.78 
-Epoch [18/60], LTrain:0.037412 ATrain: 98.85% LTest:0.020843 ATest: 99.29% Time[s]: 23.51 w_clip/entropy[bits]: 0.778/7.20 1.307/6.61 1.063/6.81 0.631/2.95 0.477/3.43 1.626/2.63 
-Epoch [19/60], LTrain:0.037285 ATrain: 98.84% LTest:0.021468 ATest: 99.42% Time[s]: 23.68 w_clip/entropy[bits]: 0.770/7.22 1.342/6.58 1.056/6.82 0.644/2.95 0.491/3.42 1.708/2.57 
-Epoch [20/60], LTrain:0.034591 ATrain: 98.89% LTest:0.020531 ATest: 99.38% Time[s]: 23.38 w_clip/entropy[bits]: 0.752/7.27 1.353/6.60 1.080/6.82 0.658/2.94 0.499/3.41 1.844/2.51 
-Epoch [21/60], LTrain:0.034750 ATrain: 98.92% LTest:0.020519 ATest: 99.39% Time[s]: 23.24 w_clip/entropy[bits]: 0.790/7.21 1.360/6.57 1.118/6.78 0.669/2.94 0.505/3.42 1.884/2.48 
-Epoch [22/60], LTrain:0.034378 ATrain: 98.90% LTest:0.022741 ATest: 99.35% Time[s]: 23.73 w_clip/entropy[bits]: 0.804/7.29 1.397/6.58 1.083/6.87 0.683/2.94 0.520/3.40 1.908/2.50 
-Epoch [23/60], LTrain:0.033335 ATrain: 98.98% LTest:0.024188 ATest: 99.34% Time[s]: 23.74 w_clip/entropy[bits]: 0.805/7.23 1.422/6.58 1.090/6.82 0.692/2.94 0.528/3.40 1.934/2.50 
-Epoch [24/60], LTrain:0.033024 ATrain: 98.96% LTest:0.022000 ATest: 99.33% Time[s]: 23.89 w_clip/entropy[bits]: 0.825/7.21 1.400/6.56 1.126/6.82 0.704/2.94 0.537/3.39 1.973/2.47 
-Epoch [25/60], LTrain:0.032755 ATrain: 98.95% LTest:0.019204 ATest: 99.33% Time[s]: 23.74 w_clip/entropy[bits]: 0.806/7.24 1.451/6.58 1.102/6.83 0.716/2.93 0.544/3.39 2.014/2.46 
-Epoch [26/60], LTrain:0.030758 ATrain: 99.05% LTest:0.021182 ATest: 99.33% Time[s]: 23.96 w_clip/entropy[bits]: 0.813/7.23 1.497/6.53 1.118/6.80 0.724/2.92 0.550/3.39 2.052/2.46 
-Epoch [27/60], LTrain:0.031116 ATrain: 99.03% LTest:0.019553 ATest: 99.28% Time[s]: 23.82 w_clip/entropy[bits]: 0.812/7.21 1.578/6.46 1.096/6.85 0.730/2.93 0.555/3.39 2.087/2.44 
-Epoch [28/60], LTrain:0.029046 ATrain: 99.07% LTest:0.019106 ATest: 99.35% Time[s]: 23.74 w_clip/entropy[bits]: 0.830/7.19 1.625/6.40 1.140/6.84 0.738/2.93 0.559/3.39 2.149/2.41 
-Epoch [29/60], LTrain:0.029817 ATrain: 99.05% LTest:0.018342 ATest: 99.39% Time[s]: 23.76 w_clip/entropy[bits]: 0.829/7.24 1.612/6.45 1.144/6.84 0.744/2.92 0.564/3.39 2.215/2.37 
-Epoch [30/60], LTrain:0.027870 ATrain: 99.13% LTest:0.020384 ATest: 99.37% Time[s]: 23.82 w_clip/entropy[bits]: 0.839/7.24 1.638/6.41 1.151/6.80 0.749/2.93 0.568/3.38 2.221/2.42 
-Epoch [31/60], LTrain:0.027983 ATrain: 99.10% LTest:0.021143 ATest: 99.29% Time[s]: 23.70 w_clip/entropy[bits]: 0.813/7.24 1.656/6.41 1.164/6.80 0.755/2.93 0.572/3.39 2.246/2.38 
-Epoch [32/60], LTrain:0.026020 ATrain: 99.19% LTest:0.018749 ATest: 99.42% Time[s]: 25.38 w_clip/entropy[bits]: 0.814/7.26 1.650/6.42 1.142/6.78 0.762/2.92 0.577/3.38 2.275/2.36 
-Epoch [33/60], LTrain:0.027312 ATrain: 99.15% LTest:0.020506 ATest: 99.35% Time[s]: 25.31 w_clip/entropy[bits]: 0.838/7.29 1.656/6.39 1.142/6.80 0.765/2.92 0.583/3.38 2.333/2.36 
-Epoch [34/60], LTrain:0.026533 ATrain: 99.17% LTest:0.017750 ATest: 99.43% Time[s]: 25.06 w_clip/entropy[bits]: 0.841/7.25 1.647/6.42 1.138/6.81 0.771/2.92 0.588/3.37 2.391/2.33 
-Epoch [35/60], LTrain:0.026137 ATrain: 99.20% LTest:0.018567 ATest: 99.45% Time[s]: 25.26 w_clip/entropy[bits]: 0.831/7.23 1.655/6.42 1.145/6.85 0.777/2.91 0.591/3.37 2.439/2.31 
-Epoch [36/60], LTrain:0.026583 ATrain: 99.17% LTest:0.018160 ATest: 99.43% Time[s]: 25.20 w_clip/entropy[bits]: 0.850/7.21 1.642/6.42 1.159/6.84 0.781/2.91 0.592/3.38 2.495/2.31 
-Epoch [37/60], LTrain:0.025586 ATrain: 99.19% LTest:0.017718 ATest: 99.41% Time[s]: 25.54 w_clip/entropy[bits]: 0.857/7.24 1.623/6.45 1.144/6.84 0.784/2.91 0.594/3.38 2.535/2.29 
-Epoch [38/60], LTrain:0.024944 ATrain: 99.22% LTest:0.019502 ATest: 99.43% Time[s]: 25.19 w_clip/entropy[bits]: 0.856/7.21 1.625/6.46 1.148/6.84 0.787/2.91 0.596/3.38 2.566/2.28 
-Epoch [39/60], LTrain:0.024757 ATrain: 99.23% LTest:0.022663 ATest: 99.29% Time[s]: 25.31 w_clip/entropy[bits]: 0.857/7.18 1.605/6.46 1.150/6.85 0.788/2.91 0.597/3.37 2.613/2.27 
-Epoch [40/60], LTrain:0.025003 ATrain: 99.22% LTest:0.018734 ATest: 99.43% Time[s]: 25.11 w_clip/entropy[bits]: 0.876/7.18 1.609/6.46 1.158/6.81 0.789/2.91 0.598/3.38 2.628/2.26 
-Epoch [41/60], LTrain:0.023419 ATrain: 99.28% LTest:0.018621 ATest: 99.46% Time[s]: 25.36 w_clip/entropy[bits]: 0.864/7.20 1.614/6.46 1.174/6.80 0.791/2.91 0.599/3.38 2.637/2.27 
-Epoch [42/60], LTrain:0.023091 ATrain: 99.29% LTest:0.018323 ATest: 99.43% Time[s]: 25.29 w_clip/entropy[bits]: 0.869/7.19 1.623/6.43 1.162/6.80 0.792/2.91 0.599/3.38 2.654/2.26 
-Epoch [43/60], LTrain:0.022368 ATrain: 99.29% LTest:0.018484 ATest: 99.38% Time[s]: 25.45 w_clip/entropy[bits]: 0.869/7.24 1.618/6.43 1.151/6.81 0.793/2.91 0.602/3.37 2.670/2.26 
-Epoch [44/60], LTrain:0.023405 ATrain: 99.31% LTest:0.019622 ATest: 99.46% Time[s]: 25.37 w_clip/entropy[bits]: 0.869/7.16 1.630/6.42 1.163/6.79 0.795/2.91 0.603/3.37 2.687/2.26 
-Epoch [45/60], LTrain:0.023481 ATrain: 99.28% LTest:0.018491 ATest: 99.46% Time[s]: 25.23 w_clip/entropy[bits]: 0.878/7.15 1.631/6.46 1.165/6.83 0.796/2.91 0.603/3.37 2.702/2.25 
-Epoch [46/60], LTrain:0.022140 ATrain: 99.30% LTest:0.017929 ATest: 99.35% Time[s]: 25.62 w_clip/entropy[bits]: 0.878/7.19 1.633/6.44 1.166/6.80 0.797/2.91 0.603/3.37 2.717/2.25 
-Epoch [47/60], LTrain:0.020767 ATrain: 99.36% LTest:0.019444 ATest: 99.42% Time[s]: 25.34 w_clip/entropy[bits]: 0.880/7.19 1.634/6.45 1.172/6.78 0.798/2.91 0.603/3.37 2.727/2.24 
-Epoch [48/60], LTrain:0.021642 ATrain: 99.32% LTest:0.017317 ATest: 99.41% Time[s]: 25.25 w_clip/entropy[bits]: 0.889/7.22 1.633/6.46 1.166/6.80 0.798/2.91 0.602/3.38 2.737/2.23 
-Epoch [49/60], LTrain:0.021045 ATrain: 99.35% LTest:0.016369 ATest: 99.48% Time[s]: 25.52 w_clip/entropy[bits]: 0.886/7.16 1.627/6.43 1.165/6.77 0.798/2.91 0.603/3.37 2.747/2.23 
-Epoch [50/60], LTrain:0.020035 ATrain: 99.40% LTest:0.016755 ATest: 99.48% Time[s]: 25.25 w_clip/entropy[bits]: 0.883/7.17 1.627/6.43 1.171/6.81 0.798/2.91 0.603/3.37 2.751/2.24 
-Epoch [51/60], LTrain:0.020385 ATrain: 99.37% LTest:0.017537 ATest: 99.49% Time[s]: 25.26 w_clip/entropy[bits]: 0.884/7.17 1.626/6.44 1.168/6.82 0.798/2.91 0.604/3.37 2.754/2.24 
-Epoch [52/60], LTrain:0.019252 ATrain: 99.41% LTest:0.018219 ATest: 99.44% Time[s]: 25.00 w_clip/entropy[bits]: 0.889/7.16 1.624/6.44 1.166/6.82 0.799/2.91 0.604/3.37 2.758/2.24 
-Epoch [53/60], LTrain:0.020902 ATrain: 99.34% LTest:0.017604 ATest: 99.43% Time[s]: 23.25 w_clip/entropy[bits]: 0.889/7.16 1.625/6.42 1.165/6.82 0.799/2.91 0.605/3.37 2.761/2.23 
-Epoch [54/60], LTrain:0.018936 ATrain: 99.43% LTest:0.017970 ATest: 99.44% Time[s]: 24.14 w_clip/entropy[bits]: 0.889/7.14 1.625/6.44 1.165/6.79 0.799/2.91 0.605/3.37 2.764/2.23 
-Epoch [55/60], LTrain:0.018598 ATrain: 99.42% LTest:0.017754 ATest: 99.43% Time[s]: 24.83 w_clip/entropy[bits]: 0.888/7.17 1.625/6.46 1.165/6.81 0.799/2.91 0.605/3.37 2.767/2.22 
-Epoch [56/60], LTrain:0.020071 ATrain: 99.39% LTest:0.017203 ATest: 99.43% Time[s]: 25.10 w_clip/entropy[bits]: 0.888/7.16 1.624/6.45 1.165/6.79 0.799/2.91 0.605/3.37 2.768/2.22 
-Epoch [57/60], LTrain:0.018656 ATrain: 99.42% LTest:0.017223 ATest: 99.46% Time[s]: 26.03 w_clip/entropy[bits]: 0.888/7.16 1.624/6.45 1.164/6.79 0.799/2.91 0.605/3.37 2.769/2.23 
-Epoch [58/60], LTrain:0.017672 ATrain: 99.45% LTest:0.016865 ATest: 99.46% Time[s]: 27.06 w_clip/entropy[bits]: 0.888/7.15 1.624/6.45 1.164/6.79 0.799/2.91 0.605/3.37 2.770/2.23 
-Epoch [59/60], LTrain:0.018378 ATrain: 99.44% LTest:0.017043 ATest: 99.46% Time[s]: 26.20 w_clip/entropy[bits]: 0.888/7.15 1.624/6.44 1.164/6.79 0.799/2.91 0.605/3.37 2.770/2.24 
-Epoch [60/60], LTrain:0.019358 ATrain: 99.41% LTest:0.017571 ATest: 99.44% Time[s]: 26.37 w_clip/entropy[bits]: 0.888/7.15 1.624/6.44 1.164/6.78 0.799/2.91 0.605/3.37 2.770/2.23 
-
-
-48 wide, 2 bit
-
-Epoch [58/60], LTrain:0.022044 ATrain: 99.30% LTest:0.019007 ATest: 99.41% Time[s]: 18.50 w_clip/entropy[bits]: 1.080/6.82 1.612/6.43 1.166/6.70 0.659/1.75 0.658/3.40 1.347/3.19 
-Epoch [59/60], LTrain:0.022665 ATrain: 99.29% LTest:0.018640 ATest: 99.42% Time[s]: 18.45 w_clip/entropy[bits]: 1.080/6.81 1.612/6.44 1.166/6.70 0.659/1.75 0.658/3.41 1.347/3.19 
-Epoch [60/60], LTrain:0.021771 ATrain: 99.30% LTest:0.018820 ATest: 99.44% Time[s]: 18.65 w_clip/entropy[bits]: 1.080/6.82 1.612/6.44 1.166/6.69 0.659/1.75 0.658/3.41 1.347/3.19 
-TotalBits: 74368 TotalBytes: 9296.0 
-saving model...
+### Inference performance on MCU
 
 
 
-32wide, 2 bit
-
-Epoch [59/60], LTrain:0.028556 ATrain: 99.10% LTest:0.022346 ATest: 99.31% Time[s]: 22.82 Act: 45.5% w_clip/entropy[bits]: 1.139/6.66 1.716/6.28 0.938/6.67 0.732/1.76 0.649/3.51 1.048/3.53 
-Epoch [60/60], LTrain:0.027292 ATrain: 99.12% LTest:0.022582 ATest: 99.28% Time[s]: 22.65 Act: 45.5% w_clip/entropy[bits]: 1.139/6.66 1.716/6.28 0.938/6.67 0.732/1.76 0.649/3.51 1.048/3.53 
-TotalBits: 58624 TotalBytes: 7328.0 
-
-64wide, 2 bit, 90ep
-
-Total number of bits: 90112 (11.0 kbytes)
-inference of quantized model
-Accuracy/Test of quantized model: 99.53999999999999 %
-Exporting model to header file
-
-Epoch [89/90], LTrain:0.016856 ATrain: 99.46% LTest:0.015817 ATest: 99.54% Time[s]: 28.26 Act: 47.3% w_clip/entropy[bits]: 1.092/7.05 2.113/6.29 1.731/6.49 0.758/1.72 0.793/3.28 1.494/3.29 
-Epoch [90/90], LTrain:0.017462 ATrain: 99.47% LTest:0.015791 ATest: 99.55% Time[s]: 27.89 Act: 47.3% w_clip/entropy[bits]: 1.092/7.05 2.113/6.29 1.731/6.49 0.758/1.72 0.793/3.28 1.494/3.29
-
-80wide,2 bit, 90ep
-
-Epoch [89/90], LTrain:0.014727 ATrain: 99.54% LTest:0.017152 ATest: 99.44% Time[s]: 28.64 Act: 45.2% w_clip/entropy[bits]: 1.117/7.07 1.442/6.83 1.776/6.48 0.676/1.72 0.738/3.32 1.332/3.40 
-Epoch [90/90], LTrain:0.015139 ATrain: 99.51% LTest:0.017336 ATest: 99.42% Time[s]: 28.61 Act: 45.2% w_clip/entropy[bits]: 1.117/7.06 1.442/6.84 1.776/6.48 0.676/1.72 0.738/3.32 1.332/3.40 
-TotalBits: 105856 TotalBytes: 13232.0 
-
-16wide, 2 bit, 60ep
-Epoch [60/60], LTrain:0.048836 ATrain: 98.43% LTest:0.029402 ATest: 99.06% Time[s]: 27.15 Act: 45.0% w_clip/entropy[bits]: 0.833/6.49 1.716/6.05 0.810/6.37 0.925/1.78 0.707/3.46 1.035/3.63 
-TotalBits: 42880 TotalBytes: 5360.0 
-Starting MNIST inference...
-Inference of Sample 1   Prediction: 7   Label: 7        Timing: 784366 clock cycles
-Inference of Sample 2   Prediction: 1   Label: 1        Timing: 787417 clock cycles
-Inference of Sample 3   Prediction: 9   Label: 9        Timing: 783585 clock cycles
-
-
-16wide, 4bit,4bit,60ep
-Epoch [59/60], LTrain:0.042492 ATrain: 98.65% LTest:0.024877 ATest: 99.12% Time[s]: 27.19 Act: 50.2% w_clip/entropy[bits]: 0.885/6.43 1.319/6.18 0.752/6.49 1.105/2.96 0.708/3.42 1.161/3.50 
-Epoch [60/60], LTrain:0.043009 ATrain: 98.63% LTest:0.024892 ATest: 99.09% Time[s]: 27.19 Act: 50.2% w_clip/entropy[bits]: 0.885/6.43 1.319/6.16 0.752/6.51 1.105/2.96 0.708/3.42 1.161/3.50 
-TotalBits: 55168 TotalBytes: 6896.0 
-
-Starting MNIST inference...
-Inference of Sample 1   Prediction: 7   Label: 7        Timing: 740106 clock cycles
-Inference of Sample 2   Prediction: 1   Label: 1        Timing: 740119 clock cycles
-Inference of Sample 3   Prediction: 9   Label: 9        Timing: 739585 clock cycles
-
-
-| Configuration | Width | Quantization | Epochs | Train Accuracy | Test Accuracy | Test Error | Model Size |
-|---------------|-------|--------------|--------|----------------|---------------|------------|------------|
-| 16-wide 2-bit | 16 | 2-bit | 60 | 98.43% | 99.06% | 0.94% | 42,880 bits (5.4 kb)
-| 32-wide 2-bit | 32 | 2-bit | 60 | 99.12% | 99.28% | 0.72% | 58,624 bits (7.3 kB) |
-| 48-wide 2-bit | 48 | 2-bit | 60 | 99.30% | 99.44% | 0.56% | 74,368 bits (9.3 kB) |
-| 64-wide 2-bit MLP | 64 | 2-bit | 60 | 99.40% | *99.53%* | *0.47%* | 90,112 bits (11.0 kB) |
-| 64-wide 4-bit MLP | 64 | 4-bit | 60 | 99.41% | 99.44% | 0.56% | 100,864 bits (12.3 kB) |
-| 64-wide 2-bit (90ep) | 64 | 2-bit | 90 | 99.47% | **99.55%** | **0.45%** | 90,112 bits (11.0 kB) |
-| 80-wide 2-bit (90ep) | 80 | 2-bit | 90 | 99.51% | 99.42% | 0.58% | 105,856 bits (13.2 kB) |
-
-
-
-64-wide 2-bit (90ep) + 50% elastic
-Epoch [90/90], LTrain:0.027318 ATrain: 99.14% LTest:0.015479 ATest: 99.51% Time[s]: 32.58 Act: 48.2% w_clip/entropy[bits]: 1.209/6.85 1.489/6.71 1.204/6.87 0.792/1.73 0.754/3.40 1.395/3.31 
-TotalBits: 90112 TotalBytes: 11264.0 
 
 # References
 
@@ -1279,7 +986,6 @@ TotalBits: 90112 TotalBytes: 11264.0
 [^9]: C. Sakr et al. *Optimal Clipping and Magnitude-aware Differentiation for Improved Quantization-aware Training* [arXiv:2206.06501](https://arxiv.org/abs/2206.06501)
 
 [^10]: T. Dettmers et al. *QLoRA: Efficient Finetuning of Quantized LLMs* [[arXiv:2305.14314]](https://arxiv.org/pdf/2305.14314)
-
 
 [^11]: Y. LeCun et al. *Gradient-based learning applied to document recognition* ([Proc. IEEE, 1998](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf))
 
