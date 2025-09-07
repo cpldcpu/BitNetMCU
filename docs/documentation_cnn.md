@@ -52,7 +52,7 @@ But how do we implement them on a very limited low-end microcontroller? What is 
 Following a lengthy "human-assisted architecture search", I settled on the following architecture:
 
 <div align="center">
-    <img src="Model_cnn_overview.png" width="70%"> 
+    <img src="model_cnn_overview.png" width="70%"> 
 </div>
 
 The first layer of the former fully connected model is replaced with convolutional layers that perform the function of extracting features from the input image.
@@ -66,7 +66,7 @@ To avoid this, a technique called depthwise separable convolutions has been intr
 We take this concept one step further and use sequential depthwise separated convolutions, where we perform 3 depthwise convolutions and maxpooling operations in sequence before combining the channels again.
 
 <div align="center">
-    <img src="Model_cnn_channel.png" width="40%"> 
+    <img src="model_cnn_channel.png" width="40%"> 
 </div>
 
 The image above shows the architecture of a single CNN channel. The input image is processed by three convolution layers with ReLU activation and two maxpooling layers. The output is a 2×2=4 element feature map. A total of 64 channels are processed and the resulting 64×4 = 256 values are then fed into the fully connected layers.
