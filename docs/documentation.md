@@ -1,6 +1,6 @@
 # BitNetMCU
 
-**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**- [BitNetMCU](#bitnetmcu)
+**Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end RISC-V Microcontroller**
 
 ## Table of Contents
 - [Introduction and Motivation](#introduction-and-motivation)
@@ -39,7 +39,7 @@
 
 Recently, there has been considerable hype about large language models (LLMs) with "1 Bit" or "1.58 Bit" [^1] weight quantization. The claim is that, by using Quantization Aware Training (QAT), LLMs can be trained with almost no loss of quality when using only binary or ternary encoding of weights. 
 
-Interestingly, low bit quantization is also advantageous for inference on microcontrollers. The CH32V003 microcontroller gained some notoriety being extremely low cost for a 32 bit MCU (less than $0.15 in low volume), but is also notable for the RV32EC ISA, which supports only 16 registers and lacks a hardware multiplier. It also only has 16kb of flash and 2kb of ram.
+Interestingly, low bit quantization is also advantageous for inference on microcontrollers. The CH32V003 microcontroller gained some notoriety for being extremely low cost for a 32 bit MCU (less than $0.15 in low volume), but is also notable for the RV32EC ISA, which supports only 16 registers and lacks a hardware multiplier. It also only has 16KB of flash and 2KB of RAM.
 
 The use of a few bits for each weight encoding means that less memory is required to store weights, and inference can be performed using only additions. Thus, the absence of a multiplication instruction is not an impediment to running inference on this microcontroller.
 
@@ -98,7 +98,7 @@ For 2 and more bit quantization I chose to use symmetric encoding without zero, 
     scale = 1.0 / mag # 2 worst, 1 better, 1.5 almost as bad as 2
     u = ((w * scale - 0.5).round().clamp_(-2, 1) + 0.5) / scale
 ```
-To keep things simple, especially on side of the inference engine, I decided to use only fully connected layers and no CNN layers. To reduce memory footprint, the samples of the MNIST dataset are rescaled from 28x28 to 16x16 in size. This reduced resolution and lack of CNN layers will hamper achievable accuracy. But acceptable performance is still achievable, as shown later. The model structure is shown in the figure below.
+To keep things simple, especially on the side of the inference engine, I decided to use only fully connected layers and no CNN layers. To reduce memory footprint, the samples of the MNIST dataset are rescaled from 28x28 to 16x16 in size. This reduced resolution and lack of CNN layers will hamper achievable accuracy. But acceptable performance is still achievable, as shown later. The model structure is shown in the figure below.
 
 <div align="center">
     <img src="./Model.drawio.png" width="60%">
@@ -118,7 +118,7 @@ To investigate the efficacy of QAT, I trained the model with different bit-width
     <img src="./prepostquant.png" width="60%">
 </div>
 
-Around 98% accuracy is achieved with 8-bit quantized weights, whether trained with QAT or post-quantization. When a model is quantized to 4-bits or less after training, a significant drop in accuracy is observed. Quantization aware training can distribute the quantization error to other weights and achieves good accuracy even for one bit weights. 
+Around 98% accuracy is achieved with 8-bit quantized weights, whether trained with QAT or post-quantization. When a model is quantized to 4 bits or less after training, a significant drop in accuracy is observed. Quantization aware training can distribute the quantization error to other weights and achieves good accuracy even for one bit weights. 
 
 Advanced post-quantization schemes as used in LLMs could improve post-quantization accuracy, but QAT is clearly the preferred approach for this use case.
 
@@ -155,9 +155,9 @@ The scaling relationship above allows predicting train loss from model size. The
 
 The tests above reveal a clear monotonic relationship between the model size and both test loss and accuracy, given the training setup used. However, there's a point of saturation where the test loss does not decrease any further. This could be indicative of overfitting, or it may suggest that the training data lacks sufficient variability to accurately represent the test data.
 
-Considering the memory constraints of the target platform for inference, I've assumed that a maximum of 12kb of memory is available for the model. This is indicated by the red line in the plots above.
+Considering the memory constraints of the target platform for inference, I've assumed that a maximum of 12KB of memory is available for the model. This is indicated by the red line in the plots above.
 
-To improve model performance further, I fixed the model size to 12kb and explored various training parameters.
+To improve model performance further, I fixed the model size to 12KB and explored various training parameters.
 
 ## Optimizing training parameters
 
@@ -171,7 +171,7 @@ The table below shows a set of network parameters that result in a model size cl
 | w1                  | 176        | 128           | 112         | 64         | 40          |
 | w2                  | 160        | 128           | 96          | 64         | 32          |
 | w3                  | 160        | 112           | 96          | 64         | 32          |
-| output                 | 10         | 10            | 10          | 10         | 10          |
+| output              | 10         | 10            | 10          | 10         | 10          |
 | Number of weights   | 100416     | 64608         | 49600       | 25216      | 12864       |
 | total bits [kbit]   | 100416     | 103372.8      | 99200       | 100864     | 102912      |
 
@@ -191,7 +191,7 @@ The training loss and accuracy is shown above. As expected from the experiments 
     <img src="./12kopt_test.png" width="90%">
 </div>
 
-The test loss and accuracy, in contrast, does not show a significant improvement with longer training. The test loss increases with longer training time, suggesting overfit of the training data.
+The test loss and accuracy, in contrast, does not show a significant improvement with longer training. The test loss increases with longer training time, suggesting overfitting of the training data.
 
 <p align="center">
     <img src="./12kLoss_test.svg" width="60%">
@@ -219,7 +219,7 @@ To improve the generalization of the model, and counter the overfitting, I appli
     <img src="./12kopt_augmented.png" width="90%">
 </div>
 
-The loss and accuracy for different learning run epochs are displayed above. The training loss is higher than that observed without data augmentation, but the test accuracy also increases by more than 0.5%, approaches 98.9%. The test loss decreases with a higher number of epochs, suggesting that the model is not yet overfitting the data. This is further confirmed by the test loss plot below. Inserting dropout layers was also able to reduce overfitting, but I found that data augmentation was more effective in improving the test accuracy.
+The loss and accuracy for different training run epochs are displayed above. The training loss is higher than that observed without data augmentation, but the test accuracy also increases by more than 0.5%, approaching 98.9%. The test loss decreases with a higher number of epochs, suggesting that the model is not yet overfitting the data. This is further confirmed by the test loss plot below. Inserting dropout layers was also able to reduce overfitting, but I found that data augmentation was more effective in improving the test accuracy.
 
 <p align="center">
     <img src="./Aug_Loss_test.svg" width="60%">
@@ -238,7 +238,6 @@ There are two exceptions, labels highlighted in bold:
 1. The 8-bit quantization deviates from the trend, even with extended training. Judging from the gap to the trend, it appears that between 5 and 6 bits of the 8-bit parameters are effectively used.
 
 2. The structure with a tapered width (64/48/32/4b) seems to introduce a bottleneck that reduces accuracy.
-
 
 I was able to achieve >99% accuracy with 4-bit quantization after slightly tweaking the data augmentation parameters. The best trade-off appears to be the 64/64/64/4b structure. Further improvements might require a different model architecture, such as a CNN. However, to keep things simple, I will stop here. 99.0% accuracy already surpasses most (if not all) other MNIST inference implementations I have seen on low-end MCUs such as AVR.
 
@@ -273,7 +272,7 @@ Convolutional Neural Networks (CNNs) are typically preferred for image processin
 
 The weights of a CNN are exposed to many different features within the same image, enabling them to learn generalized features much more effectively. This makes them more robust against overfitting and reduces the need for data augmentation. Additionally, they trade higher computational effort for a smaller memory footprint, as the weights are shared across the image.
 
-To explore the potential of adding CNN layers, I added two 3x3 Conv2D layers to the model. The Conv2d layers were trained in float, while the fc layers were trained with 4-bit QAT. The model was trained with the same parameters as before (w1=w2=w3=64, augmentation, 60epochs).
+To explore the potential of adding CNN layers, I added two 3x3 Conv2D layers to the model. The Conv2D layers were trained in float, while the fc layers were trained with 4-bit QAT. The model was trained with the same parameters as before (w1=w2=w3=64, augmentation, 60 epochs).
 
 ```python 
     self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
@@ -285,7 +284,7 @@ To explore the potential of adding CNN layers, I added two 3x3 Conv2D layers to 
     x = F.max_pool2d(x, kernel_size=2, stride=2)
 ```
 
-This modification increased the test accuracy to over 99%. Memory-efficient depthwise convolution with similar parameters yielded comparable results. Another topic to follow up opon later...
+This modification increased the test accuracy to over 99%. Memory-efficient depthwise convolution with similar parameters yielded comparable results. Another topic to follow up upon later...
 
 # Architecture of the Inference Engine
 
@@ -355,11 +354,11 @@ This is how the inner loop looks in RV32EC assembly (compiled with -O3)
      20c:	fc5796e3          	bne	    a5,t0,1d8 <processfclayer+0x28>    
 ```
 
-The full loop is 6 instructions while the actual computation is just 3 instructions (lb, bltz,neg/add). The compiler did quite a good job to split the conditional into two code paths to avoid an addition "neg" instruction. 
+The full loop is 6 instructions while the actual computation is just 3 instructions (lb, bltz, neg/add). The compiler did quite a good job to split the conditional into two code paths to avoid an additional "neg" instruction. 
 
 It would be possible to unroll the loop to remove loop overhead. In that case 4 instructions are required per weight, since the trick with two codes paths would not work easily anymore.
 
-Convolution with 4 bit weight is shown below. The multiplication is implemented by individual bit test and shift, as the MCU does not support a native multiplication instruction. The encoding as one-complement number without zero helps with code efficiency. 
+Convolution with 4 bit weights is shown below. The multiplication is implemented by individual bit test and shift, as the MCU does not support a native multiplication instruction. The encoding as one's complement number without zero helps with code efficiency. 
 
 ```c
     int32_t sum = 0;
@@ -394,7 +393,7 @@ positive:
     	0e85               	addi	t4,t4,1
     	0f12               	slli	t5,t5,0x4
 
-	fdfe9fe3          	bne	    t4,t6,20000158 <loop>
+	fdfe9fe3          	bne	    t4,t0,20000158 <loop>
 ```
 
 In total 17 instructions are required per weight, with no additional loop overhead. 
@@ -403,7 +402,7 @@ Considering the observations during model optimization, binary weights require a
 
 Consequently, the pure computation time is comparable for both quantization levels, offering no inference time advantage for binary weights for the given problem setting. In fact, due to the additional overhead from the increased number of activations required with binary weights, the total execution time is likely higher for binary weights.
 
-The implementation for 2 bit quantization is not shown here, but it is similar to the 4 bit quantization. I did not implement Ternary weights due to complexity of encoding the weights in a compact way.
+The implementation for 2 bit quantization is not shown here, but it is similar to the 4 bit quantization. I did not implement ternary weights due to the complexity of encoding the weights in a compact way.
 
 It should be noted, that the execution time can be improved by skipping zero activations. Typically, more than half of the activations are zero.
 
@@ -443,7 +442,7 @@ And that's all - **not a single multiplication operation was required**.
 
 # Putting it all together 
 
-To keep things flexible, I split up the data pipeline into several python scripts. **training.py** is used to train the model and store it as *.pth* file. The model weights are still in float format at that time, since they are quantized on-the-fly during training. **exportquant.py** converts the model into a quantized format, a custom python class, that is only used as an intermediate representation for export and testing. The quantized model data is then merged into 32 bit integers and exported to a C header file. 
+To keep things flexible, I split up the data pipeline into several python scripts. **training.py** is used to train the model and store it as a *.pth* file. The model weights are still in float format at that time, since they are quantized on-the-fly during training. **exportquant.py** converts the model into a quantized format, a custom python class, that is only used as an intermediate representation for export and testing. The quantized model data is then merged into 32 bit integers and exported to a C header file. 
 
 To test inference of the actual model as a C-implementation, the inference code along with the model data is compiled into a DLL. **test-inference.py** calls the DLL and compares the results with the original python model test case by test case. This allows accurate comparison to the entire MNIST test data set of 10000 images. 
 
@@ -494,9 +493,9 @@ const uint32_t L2_weights[] = {0x1231aa2, 0x29c09a90, 0x20a16b50, 0x8c938109, 0x
 
 ## Verification of the Ansi-C Inference Engine vs. Python
 
-The exported data and the inference engine are compiled to DLL, which is then called from the python test script and compares the predictions image- by image.
+The exported data and the inference engine are compiled to DLL, which is then called from the python test script and compares the predictions image by image.
 
-The output is shown below. Curiously, the C inference engine is yet again slightly better than the Python implementation. There are still three (out of 10000) test images where both engine disagree. I believe this is due to different rounding behavior of the two engines. I was already able to reduce this from a larger number by adding additional rounding to the ShiftNorm operation. 
+The output is shown below. Curiously, the C inference engine is yet again slightly better than the Python implementation. There are still three (out of 10000) test images where both engines disagree. I believe this is due to different rounding behavior of the two engines. I was already able to reduce this from a larger number by adding additional rounding to the ShiftNorm operation. 
 
 ```
 Loading model...
@@ -514,15 +513,16 @@ Overall accuracy C: 99.02 %
 Overall accuracy Python: 99.00999999999999 %
 Mismatches between engines: 3 (0.03%)
 ```
+
 ## Implementation on the CH32V003
 
-The implementation on the CH32V003 is straightforward and can be found [here](https://github.com/cpldcpu/BitNetMCU/tree/main/mcu). The model data is included in the C code, and the inference engine is called from the main loop. I used the excellent [CH32V003fun](https://github.com/cnlohr/ch32v003fun) environment to minimize overhead code as much as possible. This allowed me to include up to 12KB of model data into the 16KB of flash memory.  The execution timing was optimized by moving the fc-layer code to the SRAM, which avoids flash wait states. Further optimizations on assembler level will certainly improve the performance further, but the generated code was already quite good.
+The implementation on the CH32V003 is straightforward and can be found [here](https://github.com/cpldcpu/BitNetMCU/tree/main/mcu). The model data is included in the C code, and the inference engine is called from the main loop. I used the excellent [CH32V003fun](https://github.com/cnlohr/ch32v003fun) environment to minimize overhead code as much as possible. This allowed me to include up to 12KB of model data into the 16KB of flash memory. The execution timing was optimized by moving the fc-layer code to the SRAM, which avoids flash wait states. Further optimizations on assembler level will certainly improve the performance further, but the generated code was already quite good.
 
 <div align="center">
     <img src="themcu.jpg" width="50%">
 </div>
 
-Four test cases are evaluated, and the execution timing is measured using the internal SysTick profiling timer. The results are printed to the debug-console using printf.
+Four test cases are evaluated, and the execution timing is measured using the internal SysTick profiling timer. The results are printed to the debug console using printf.
 
 Example output for inference with a 25126 4-bit parameter model is shown below.
 
@@ -532,7 +532,7 @@ Example output for inference with a 25126 4-bit parameter model is shown below.
 
 The execution time is approximately 650,000 cycles, which corresponds to 13.66ms at a 48MHz main clock. This is equivalent to 3.69 million operations per second ("MOPS"). The model achieves a test accuracy of 99.02%, which is quite impressive for such a small microcontroller and surpasses all other MCU-based MNIST implementations I have encountered.
 
-I also tested a smaller model with 4512 2-bit parameters. Despite its size, it still achieves a 94.22% test accuracy. Due to its lower computational requirements, it executes in only 1.88ms.
+I also tested a smaller model with 4512 2-bit parameters. Despite its size, it still achieves 94.22% test accuracy. Due to its lower computational requirements, it executes in only 1.88ms.
 
 # Summary and Conclusions
 This marks the end of my journey to implement an MNIST inference engine with an impressive 99.02% test accuracy on a very limited $0.15 RISC-V microcontroller, which lacks a multiplication instruction and has only 16KB of flash memory and 2KB of RAM.
@@ -542,6 +542,7 @@ This achievement was made possible by employing Quantization Aware Training (QAT
 By simplifying the model architecture and using a full-custom implementation, I bypassed the usual complexities and memory overhead associated with Edge-ML inference engines.
 
 While this project focused on MNIST inference as a test case, I plan to apply this approach to other applications in the future.
+
 # Updates
 ## May 20, 2024: Additional quantization schemes
 
@@ -585,7 +586,7 @@ positive:
 		0e85               	addi	t4,t4,1
 		0f12               	slli	t5,t5,0x4
 
-	fdfe9fe3          	bne	    t4,t6,20000158 <loop>
+	fdfe9fe3          	bne	    t4,t0,20000158 <loop>
 ```
 
 Amazingly, Quantization Aware Training is able to adjust the weights in a way where this encoding can be used efficiently. A test accuracy of 98.66% was achieved with the same model size and training settings, which is only slightly lower than for ```4bitsym``` encoding. The inference time reduces to 10.17ms from 13.66ms due to the simpler shift operation.
@@ -598,7 +599,7 @@ The first layer weights are shown below. Due to the increased contrast enforced 
     <img src="first_layer_weights_fp130.png" width="60%">
 </div>
 
-The entropy is comparable to other 4 bit encodings, suggesting similar effective use of the coding space. We can, however, see that the lower layers do not use all of the available codes, which could be optimized further but different normalization schemes.
+The entropy is comparable to other 4 bit encodings, suggesting similar effective use of the coding space. We can, however, see that the lower layers do not use all of the available codes, which could be optimized further with different normalization schemes.
 
 <div align="center">
     <img src="fp130_export.png" width="80%">
@@ -607,7 +608,7 @@ The entropy is comparable to other 4 bit encodings, suggesting similar effective
 
 ### 4-bit ones complement quantization
 
-The current implementation of 4 bit quantization ```4bitsym``` uses a symmetric encoding without zero. This is easy to implement on multiplierless MCUs, but becomes unnecessarily complex when a multiplier is available. Therefore, I introduced ```4bit``` encoding, which encodes a 4 bit signed value is a one-complement number including zero: ```-8, -7 ... -2, -1, 0, 1, 2, ... 6, 7```.
+The current implementation of 4 bit quantization ```4bitsym``` uses a symmetric encoding without zero. This is easy to implement on multiplierless MCUs, but becomes unnecessarily complex when a multiplier is available. Therefore, I introduced ```4bit``` encoding, which encodes a 4 bit signed value as a one's complement number including zero: ```-8, -7 ... -2, -1, 0, 1, 2, ... 6, 7```.
 
 This allows for a more efficient implementation of the inference code, given that the multiplication instruction is available:
 
@@ -639,9 +640,10 @@ loop:
 
     	fffe15e3          	bne	    t3,t6,2000011e <loop>
 ```
+
 ## May 20, 2024: Quantization scaling
 
-I introduced a new hyperparameter that was previously hardcoded: ```quantscale```. This parameters influences the scaling of the weights. It will determine the value of the standard-deviation of the weights per tensor relative to the maximum value of the quantization scheme. Previously, the parameter was set to a default of 0.25, which corresponds to a standard deviation of approximately 2 for the ```4bitsym``` encoding.
+I introduced a new hyperparameter that was previously hardcoded: ```quantscale```. This parameter influences the scaling of the weights. It will determine the value of the standard deviation of the weights per tensor relative to the maximum value of the quantization scheme. Previously, the parameter was set to a default of 0.25, which corresponds to a standard deviation of approximately 2 for the ```4bitsym``` encoding.
 
 The plot below shows how the parameter influences the distribution of the first layer weights for the ```4bitsym``` encoding. 
 
@@ -649,13 +651,13 @@ The plot below shows how the parameter influences the distribution of the first 
     <img src="4bit_histograms.png" width="60%">
 </div>
 
-We can see that the weights follow roughly a normal distribution with some extreme outliers. Changing quantscale to a higher value with make the distribution wider and increase the fraction of outliers at the maxima. QAT makes sure that the errors introducing from clipping the outliers are distributed to other weights.
+We can see that the weights follow roughly a normal distribution with some extreme outliers. Changing quantscale to a higher value will make the distribution wider and increase the fraction of outliers at the maxima. QAT makes sure that the errors introduced from clipping the outliers are distributed to other weights.
 
 <div align="center">
     <img src="quantscale_scan.png" width="70%">
 </div>
 
-I performed a scan of the parameter for the ```4bitsym``` and ```4bit``` encoding. We see that too high (0.5) and too low (0.125) degrade the weight distribution, leading to an increase of loss and worse test and train accuracy. Within the range of 0.2 to 0.4, the performance seems to be relatively stable. However, there is still a strong random variation of accuracy, caused by different initializations of the weights. This is also owed to the marginal capacity of the model which was minimized as much as possible. 
+I performed a scan of the parameter for the ```4bitsym``` and ```4bit``` encoding. We see that too high (0.5) and too low (0.125) values degrade the weight distribution, leading to an increase of loss and worse test and train accuracy. Within the range of 0.2 to 0.4, the performance seems to be relatively stable. However, there is still a strong random variation of accuracy, caused by different initializations of the weights. This is also owed to the marginal capacity of the model which was minimized as much as possible. 
 
 <div align="center">
     <img src="quantscale_entropy.png" width="70%">
@@ -663,15 +665,15 @@ I performed a scan of the parameter for the ```4bitsym``` and ```4bit``` encodin
 
 There is a rather interesting relationship when looking at standard deviation and [information entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) across the layers. As expected, ```quantscale``` biases the standard deviation in a roughly proportional way. However, we can also see that the entropy increases for higher values. For low settings, this is because most weights are around zero and are truncated. Increasing the scale parameter also increases entropy. However, the accuracy of the model does not benefit, which means that only noise is added and no useful information. 
 
-Already for an entropy of around 3 bits, it is possible to roughly maximize accuracy. This suggests that the weights can be compressed further to less than 80% of their original size, for example with an additional [entropy coding step](https://en.wikipedia.org/wiki/Entropy_coding), without loss of accuracy. Its an interesting question, whether this can also be achieved by different weight encoding.
+Already for an entropy of around 3 bits, it is possible to roughly maximize accuracy. This suggests that the weights can be compressed further to less than 80% of their original size, for example with an additional [entropy coding step](https://en.wikipedia.org/wiki/Entropy_coding), without loss of accuracy. It's an interesting question, whether this can also be achieved by different weight encoding.
 
 ## July 19, 2024: OCTAV Optimum Clipping
 
 In the previous update I introduced a new hyperparameter to control the quantization step size and indirectly the clipping. It is, however, also possible to determine an optimum based on the given weight distribution. Such a method, called OCTAV, is presented a recent paper by Nvidia (Sakr et al. [^9]). I found it via [this talk ](https://www.youtube.com/watch?v=gofI47kfD28) by Bill Dally, which is a recommended watch.
 
-The method introduces a clipping parameter `s` that determines the maximum encoded weight-value. Values with a magnitude larger than s will be clipped to s, values with a smaller magnitude are quantized according to the quantization step size. 
+The method introduces a clipping parameter `s` that determines the maximum encoded weight value. Values with a magnitude larger than s will be clipped to s, values with a smaller magnitude are quantized according to the quantization step size. 
 
-The octav algorithm determines the clipping parameter by minimizing the mean squared error `J(s)`between the original and quantized weights: Weight below s contribute to the error with quantization noise `(s*2*2^-bpw)²/12 = s²*4^-bpw / 3`, weight above s with the clipping error `(weight-s)²`. 
+The OCTAV algorithm determines the clipping parameter by minimizing the mean squared error `J(s)` between the original and quantized weights: Weights below s contribute to the error with quantization noise `(s*2*2^-bpw)²/12 = s²*4^-bpw / 3`, weights above s with the clipping error `(weight-s)²`. 
 
 <div align="center">
     <img src="octav_equation.png" width="50%">
@@ -688,15 +690,15 @@ for _ in range(num_iterations):
     s = numerator / denominator
 ```
 
-The octav method is called after every training epoch to adjust the clipping parameter for each layer. The evolution of s and entropy per layer vs training epoch is shown below.
+The OCTAV method is called after every training epoch to adjust the clipping parameter for each layer. The evolution of s and entropy per layer vs training epoch is shown below.
 
 <div align="center">
     <img src="octav.png" width="90%">
 </div>
 
-Compared to the empirical setting of `quantscale`, the octav method yielded a similar training loss. This means we can reduce the number of hyperparameters to tune.
+Compared to the empirical setting of `quantscale`, the OCTAV method yielded a similar training loss. This means we can reduce the number of hyperparameters to tune.
 
-It appears that octav minimizes the entropy of the weights, without affecting accuracy. This could be interpreted as reducing noise.
+It appears that OCTAV minimizes the entropy of the weights, without affecting accuracy. This could be interpreted as reducing noise.
 
 <div align="center">
     <img src="octav_weightdist.png" width="60%">
@@ -706,7 +708,7 @@ Looking at the distribution, it is curious that there are very few weights with 
 
 ## July 26, 2024: NormalFloat4 (NF4) Quantization
 
-Normalfloat is a data type that was introduced in the QLoRa paper by T. Dettmers[^10]. The idea is to map 4-bit weights in a way where more values are available around zero, which is the most common value for weights. The data type is information-theoretically optimized for normally distributed weights.
+NormalFloat is a data type that was introduced in the QLoRA paper by T. Dettmers[^10]. The idea is to map 4-bit weights in a way where more values are available around zero, which is the most common value for weights. The data type is information-theoretically optimized for normally distributed weights.
 
 <div align="center">
     <img src="NF4plot.png" width="50%">
@@ -714,7 +716,7 @@ Normalfloat is a data type that was introduced in the QLoRa paper by T. Dettmers
 
 The plot above shows the weight encoding. Typically, this datatype is used for post-quantization, but it also makes sense for QAT, since the weight distribution follows a normal distribution as well.
 
-To implement this datatype, it is necessary to quantize values according to an encoding table. The Python implementation (proposed by 3.5-Sonnet) is shown below. Frankly, I am quite impressed by the implementation, which hardly increased training time.
+To implement this datatype, it is necessary to quantize values according to an encoding table. The Python implementation (proposed by Claude 3.5-Sonnet) is shown below. Frankly, I am quite impressed by the implementation, which hardly increased training time.
 
 ```python
     ...
@@ -759,7 +761,7 @@ I have not yet implemented C-based inference code for `NF4`; however, it would a
 
 ## Aug 3rd, 2024: Stepped Learning Rate Schedule
 
-The Bitnet paper used a learning rate schedule that[^4] with a stepwise reduction after half of the epochs. I implemented a similar behavior by adding a configuration option that halves the learning rate at a designated epoch. To deactivate this behavior, the parameter can be set to an invalid epoch or be commented out.
+The BitNet paper used a learning rate schedule[^4] with a stepwise reduction after half of the epochs. I implemented a similar behavior by adding a configuration option that halves the learning rate at a designated epoch. To deactivate this behavior, the parameter can be set to an invalid epoch or be commented out.
 
 ```
 halve_lr_epoch: 30  # Epoch at which to halve the learning rate 
@@ -769,9 +771,9 @@ The plot below shows different learning rate schedules with and without step red
     <img src="schedules.png" width="47%">  <img src="lossvsschedule.png" width="40%">
 </div>
 
-The halving leads to an immediate improvement in training loss; however the benefit compared to the runs without halving is lost at the end of the training run. Interestingly, the halving improves test loss. This suggests that the halving leads to better regularization. The benefits are rather small, though, and may have more effect in datasets where the model capacity is more limiting.
+The halving leads to an immediate improvement in training loss; however the benefit compared to the runs without halving is lost at the end of the training run. Interestingly, the halving improves test loss. This suggests that the halving leads to better regularization. The benefits are rather small, though, and may have more effect on datasets where the model capacity is more limiting.
 
-## Aug 31st, 2025: Porting to CH32V002 and newest version of CH32fun
+## Aug 31st, 2024: Porting to CH32V002 and newest version of CH32fun
 
 I ported the example code from the CH32V003 to the CH32V002 and updated to the latest version of the CH32fun environment. It can now be compiled for any CH32V00X MCU (and also others from that series).
 
@@ -779,9 +781,9 @@ Compared to the CH32V003, the CH32V002 brings some minor changes, both good and 
 - The RISC-V core was updated to a RV32EmC instruction set architecture, which includes a multiplication instruction.
 - The Flash memory now requires 2 waitstates instead of 1 waitstate at 48MHz, reducing effective code execution speed from Flash.
 
-### Execution Time Comparison between CH32V002 and CH3V003
+### Execution Time Comparison between CH32V002 and CH32V003
 
-I compared the execution times of both MCUs in all possible configurations, with code execution from SRAM or Flash and for code using the multiplication instructions instead of bitwise adding. This is for the 12kb model with 4bit symmetric weight encoding. (Avg cycles = mean of 3 samples; Time = cycles / 48e6.)
+I compared the execution times of both MCUs in all possible configurations, with code execution from SRAM or Flash and for code using the multiplication instructions instead of bitwise adding. This is for the 12KB model with 4-bit symmetric weight encoding. (Avg cycles = mean of 3 samples; Time = cycles / 48e6.)
 
 | MCU / Mode | Memory | Multiplier | Avg cycles | Relative |
 |------------|--------|------------|-----------:|---------:|
@@ -797,7 +799,7 @@ is due to added waitstates in the parts of the code that were executed from Flas
 
 Code execution from flash degrades performance significantly for both V003 and V002. Due to the added waitstates, the V002 takes 48% longer, which is roughly proportional to the increase in memory access timing. The improvements from the fast multiplication can barely compensate for this. 
 
-Note that the slowdown for execution from flash depends on the fraction of 16 bit instructions in the code, as 32 bit fetches may partially hide latency. Note that the V002 has 4kb SRAM vs. 3kb in the V003 which allows for more code to be executed from SRAM.
+Note that the slowdown for execution from flash depends on the fraction of 16 bit instructions in the code, as 32 bit fetches may partially hide latency. Note that the V002 has 4KB SRAM vs. 2KB in the V003 which allows for more code to be executed from SRAM.
 
 # References
 
