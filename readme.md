@@ -2,11 +2,11 @@
 
 **BitNetMCU** is a project focused on the training and inference of low-bit quantized neural networks, specifically designed to run efficiently on low-end microcontrollers like the CH32V003. Quantization aware training (QAT) and fine-tuning of model structure and inference code allowed *surpassing 99% Test accuracy on a 16x16 MNIST dataset without using multiplication instructions and in only 2kb of RAM and 16kb of Flash*.
 
-**Update** Introducing a new model architecture based on deep separable convolutions allowed to push the accuracy even further to *99.55% test accuracy* on the new CH32V002 with 2kb of RAM and 16kb of Flash and hardware multiplier, meeting state-of-the-art MNIST accuracy.
+**Update** Introducing a new model architecture based on deep separable convolutions allowed to push the accuracy even further to **99.55% accuracy**, meeting state-of-the-art MNIST accuracy for CNNs while still fitting into the same memory constraints. This model requires a hardware multiplier, which is available in many low-end RISC-V and ARM Cortex-M0 microcontrollers.
 
 The training pipeline is based on PyTorch and should run anywhere. The inference engine is implemented in Ansi-C and can be easily ported to any Microcontroller.
 
-**You can find a detailed report on the project in the `docs/` directory [here](docs/documentation.md).**
+**You can find a detailed report on the project in the `docs/` directory [here](docs/documentation.md) and the CNN implementation details [here](docs/documentation_cnn.md).**
 
 <div align="center">
     <img src="docs/header_cnn.png" width="95%">
@@ -60,3 +60,4 @@ The data pipeline is split into several Python scripts for flexibility:
 - 26th May 2024 - [tagged version 0.2a](https://github.com/cpldcpu/BitNetMCU/tree/0.2a)
 - 19th July 2024 - [Added octav algorithm](https://github.com/cpldcpu/BitNetMCU/blob/main/docs/documentation.md#july-19-2024-octav-optimum-clipping) to calculate optimal clipping and quantization parameters.
 - 26th July 2024 -  Added support for NormalFloat4 (NF4) Quantization. [Updated documentation](docs/documentation.md#july-26-2024-normalfloat4-nf4-quantization)
+- 6th June 2024 - New CNN architecture based on sequential depthwise separable convolutions allows to reach 99.55% accuracy while still fitting into 16kb Flash and 2kb RAM. [See documentation](docs/documentation_cnn.md) for details.
