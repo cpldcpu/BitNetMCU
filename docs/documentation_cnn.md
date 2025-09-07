@@ -2,7 +2,7 @@
 
 **Beating 99.5% MNIST accuracy with Convolutional Neural Networks for Low-Bit Quantized Neural Networks on low-end 32 Bit Microcontrollers**
 
-*T. S. Boescke, Aug 2024 - Sept 2025*
+*T. S. Boescke, Sept 2025* [Document origin](https://github.com/cpldcpu/BitNetMCU/tree/main/docs) 
 
 ## Table of Contents
 - [BitNetMCU - CNN Implementation](#bitnetmcu---cnn-implementation)
@@ -143,7 +143,7 @@ The table above shows all learnable parameters in the model. The first fully con
 
 ## CNN Implementation Results
 
-### Performance Comparison
+### Accuracy Trade-offs
 
 | Configuration | Width | BPW (fc1)| Epochs | Train Accuracy | Test Accuracy | Test Error | Model Size |
 |---------------|-------|--------------|--------|----------------|---------------|------------|------------|
@@ -231,4 +231,3 @@ The plot above shows the tradeoff between model size, accuracy and inference tim
 [^16]: J. Lin et al. *MCUNet: Tiny Deep Learning on IoT Devices* ([arXiv:2007.10319](https://arxiv.org/abs/2007.10319))
 
 
-[Document origin](https://github.com/cpldcpu/BitNetMCU/tree/main/docs) 
