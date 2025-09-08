@@ -71,19 +71,48 @@ void unpack_trits_32(uint32_t packed, int8_t* trits) {
 }
 ```
 
-### inference?
+```c
+// Pack 10 trits {-1,0,1} into 16 bits
+uint16_t pack_10_trits(const int8_t* trits) {
+    uint32_t packed = 0;
+    // Reverse the order during packing to make unpacking efficient
+    for (int i = 0; i < 10; i++) {
+        packed = packed * 3 + (trits[i] + 1);  // Map {-1,0,1} to {0,1,2}
+    }
+    // Apply ceiling division for fixed-point representation
+    packed = (packed * 65536 + 59048) / 59049;
+    return (uint16_t)packed;
+}
+
+// Unpack 10 trits using 32-bit arithmetic, reading from bits 16-17
+void unpack_10_trits(uint16_t packed, int8_t* trits) {
+    uint32_t val = packed;  // Load into 32-bit register
+    
+    for (int i = 0; i < 10; i++) {
+        val = val * 3;
+        // Extract trit from bits 16-17 (0x30000 = 0b11 << 16)
+        uint32_t trit = (val >> 16) & 0x3;
+        trits[i] = (int8_t)trit - 1;  // Map {0,1,2} to {-1,0,1}
+        
+        // Clear bits 16-17 for next iteration
+        val &= 0xFFFF;
+    }
+}
+```
+### Inference?
 
 ```c
+  10 trits packed into 16 bits
    // encoding:
    // 0 = 00 = +1
    // 1 = 01 = -1
    // 2 = 10 =  0
 
       int32_t sum=0;
-      for (uint32_t j = 0; j < 16; j++) {
-          if !(weightChunk & 0x80000000) {
+      for (uint32_t j = 0; j < 10; j++) {
+          if (!(weightChunk & 0x20000)) {
               int32_t in = *activations_idx;
-              sum += (weightChunk & 0x40000000) ? -in : in; 
+              sum += (weightChunk & 0x10000) ? -in : in; 
           }
           activations_idx++;
           weightChunk += (weightChunk << 1); // weightchunk = weightchunk * 3
