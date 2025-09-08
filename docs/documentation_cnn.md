@@ -209,12 +209,12 @@ saving model...
 
 ### Performance on EMNIST Letters and Balanced
 
-I also trained the 64-wide CNN-96-64 model on the EMNIST_LETTERS and EMNIST_BALANCED datasets[^17], which have more than 10 classes. The results are shown below. Despite the model was not optimized for these much larger datasets, the performance is still very good. 
+I also trained the 64-wide CNN-96-64 model on the EMNIST_LETTERS and EMNIST_BALANCED datasets[^17], which have more than 10 classes. The results are shown below. Despite the model not being optimized for these more complex datasets, the performance is still very good.
 
 | Dataset         | Classes | Train Acc | Test Loss | Test Acc | Model Size (kB) |
 |-----------------|---------|-----------|-----------|----------|-----------------|
-| EMNIST_LETTERS  | 37      | 93.63%    | 0.172070  | 94.18%   | 11.84 |
-| EMNIST_BALANCED | 47      | 87.63%    | 0.329145  | 88.24%   | 12.17 |
+| EMNIST_LETTERS  | 37      | 93.63%    | 0.172070  | **94.18%**   | 11.84 |
+| EMNIST_BALANCED | 47      | 87.63%    | 0.329145  | **88.24%**   | 12.17 |
 
 The EMNIST_BALANCED dataset contains numbers and letters and is therefore suitable to implement a simple OCR application on a low end microcontroller.
 
