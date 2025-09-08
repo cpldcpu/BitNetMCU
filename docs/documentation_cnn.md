@@ -124,7 +124,7 @@ The last piece of the puzzle was to use variable quantization. As shown in the f
 
 The convolution layers turned out to be very sensitive to quantization. Better performing models degraded even for 4-bit weights. Luckily, the number of weights in the convolution layers is rather small, so there is little memory benefit in quantizing to below 8 bits.
 
-However, the depthwise convolutions also turned out to be very sensitive to scaling errors in activations between the channels. In addition, to avoid mismatch between the channels, it was not possible to use normalization between the layers. I therefore opted to keep the activations in full 32-bit resolution and introduce fixed shifts to limit the dynamic range. Only after all channels are processed, quantization of activations to 8 bits and normalization is performed before feeding the data into the fully connected layers.
+However, the depthwise convolutions also turned out to be very sensitive to scaling errors in activations between the channels. In addition, to avoid mismatch between the channels, it was not possible to use normalization between the layers. I therefore opted to keep the activations in full 32-bit resolution and introduce fixed shifts to limit the dynamic range. Only after all channels are processed, normalization is performed across all channels (layernorm) and they are rescaling to 8 bit before feeding the data into the fully connected layers.
 
 ```
    Layer (type)        Output Shape      Param #      BPW    Bytes # 
@@ -195,17 +195,6 @@ Neither did additional experiments (not shown) with a fully connected CNN archit
  
 This suggests that the remaining mispredicted samples are far out of distribution for the given model. Possibly ensemble methods or a much higher capacity model coupled with a different regularization scheme would be required to push the error rate further down.
 
-
-
-EMNIST_LETTERS
-Epoch [60/60], LTrain:0.180942 ATrain: 93.63% LTest:0.172070 ATest: 94.18% Time[s]: 38.14 Act: 45.7% w_clip/entropy[bits]: 1.336/6.92 3.164/5.91 2.310/6.23 1.408/1.66 1.252/3.18 2.835/2.81 
-TotalBits: 97024 TotalBytes: 12128.0 
-
-saving model...
-EMNIST_BALANCED
-Epoch [60/60], LTrain:0.333171 ATrain: 87.63% LTest:0.329145 ATest: 88.24% Time[s]: 46.06 Act: 45.5% w_clip/entropy[bits]: 1.299/6.87 3.305/5.94 1.185/6.89 1.455/1.69 1.219/3.29 1.834/3.21 
-TotalBits: 99584 TotalBytes: 12448.0 
-saving model...
 
 ### Performance on EMNIST Letters and Balanced
 
