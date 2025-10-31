@@ -124,7 +124,7 @@ if __name__ == '__main__':
     correct_py = 0
     mismatch = 0
 
-    test_loader2 = DataLoader(test_data, batch_size=1, shuffle=True)    
+    test_loader2 = DataLoader(test_data, batch_size=1, shuffle=False)    
 
     # export_test_data_to_c(test_loader2, 'BitNetMCU_MNIST_test_data.h', num=10)
 
@@ -159,7 +159,7 @@ if __name__ == '__main__':
             correct_py += 1
 
         if (result_c != predict_py[0]):
-            print(f'Mismatch between inference engines found. Prediction C: {result_c} Prediction Python: {predict_py[0]} True: {labels[0]}')
+            print(f'{counter:5} Mismatch between inference engines found. Prediction C: {result_c} Prediction Python: {predict_py[0]} True: {labels[0]}')
             mismatch +=1
 
         counter += 1

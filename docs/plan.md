@@ -24,6 +24,102 @@
 
 # Funnel
 
+## Ternary encoding
+
+### packing 
+
+https://compilade.net/blog/ternary-packing
+
+```c
+// Pack 20 trits (values in {-1,0,1}) into a 32-bit word
+uint32_t pack_trits_32(const int8_t* trits) {
+    uint32_t value = 0;
+    
+    // Build base-3 number from trits (least significant first)
+    for (int i = 19; i >= 0; i--) {
+        value = value * 3 + (trits[i] + 1);  // Map {-1,0,1} to {0,1,2}
+    }
+    
+    // Scale so first trit appears in MSBs
+    // Multiply by 2^32 / 3^20 using fixed-point arithmetic
+    // 2^32 / 3^20 ≈ 1.23116 
+    // Using 64-bit intermediate to avoid overflow
+    uint64_t scaled = ((uint64_t)value << 32) / 3486784401ULL;
+    
+    // Ceiling division to avoid errors during unpacking
+    if (((uint64_t)value << 32) % 3486784401ULL != 0) {
+        scaled++;
+    }
+    
+    return (uint32_t)scaled;
+}
+```
+### unpacking
+```c
+// Unpack 20 trits from a 32-bit word
+void unpack_trits_32(uint32_t packed, int8_t* trits) {
+    uint64_t val = packed & 0xFFFFFFFFULL; // Use 64-bit to prevent overflow
+    
+    for (int i = 0; i < 20; i++) {
+        // Extract trit from the two MSBs
+        uint8_t trit = val >> 32; // Get the top 2 bits
+        trits[i] = trit - 1;  // Convert {0,1,2} to {-1,0,1}
+        
+        // Clear the MSBs and shift up remaining trits
+        val = (val & 0xFFFFFFFFULL) * 3;
+    }
+}
+```
+
+```c
+// Pack 10 trits {-1,0,1} into 16 bits
+uint16_t pack_10_trits(const int8_t* trits) {
+    uint32_t packed = 0;
+    // Reverse the order during packing to make unpacking efficient
+    for (int i = 0; i < 10; i++) {
+        packed = packed * 3 + (trits[i] + 1);  // Map {-1,0,1} to {0,1,2}
+    }
+    // Apply ceiling division for fixed-point representation
+    packed = (packed * 65536 + 59048) / 59049;
+    return (uint16_t)packed;
+}
+
+// Unpack 10 trits using 32-bit arithmetic, reading from bits 16-17
+void unpack_10_trits(uint16_t packed, int8_t* trits) {
+    uint32_t val = packed;  // Load into 32-bit register
+    
+    for (int i = 0; i < 10; i++) {
+        val = val * 3;
+        // Extract trit from bits 16-17 (0x30000 = 0b11 << 16)
+        uint32_t trit = (val >> 16) & 0x3;
+        trits[i] = (int8_t)trit - 1;  // Map {0,1,2} to {-1,0,1}
+        
+        // Clear bits 16-17 for next iteration
+        val &= 0xFFFF;
+    }
+}
+```
+### Inference?
+
+```c
+  10 trits packed into 16 bits
+   // encoding:
+   // 0 = 00 = +1
+   // 1 = 01 = -1
+   // 2 = 10 =  0
+
+      int32_t sum=0;
+      for (uint32_t j = 0; j < 10; j++) {
+          if (!(weightChunk & 0x20000)) {
+              int32_t in = *activations_idx;
+              sum += (weightChunk & 0x10000) ? -in : in; 
+          }
+          activations_idx++;
+          weightChunk += (weightChunk << 1); // weightchunk = weightchunk * 3
+      }
+```
+
+
 ## Activation functions other than ReLU
 
 Can activations functions help to improve network capacity and alleviate quantization noise?

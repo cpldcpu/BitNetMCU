@@ -1,7 +1,7 @@
 import torch, torch.nn as nn, torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import ConcatDataset
@@ -14,6 +14,7 @@ import argparse
 import yaml
 from torchsummary import summary
 import importlib
+from models import MaskingLayer
 
 #----------------------------------------------
 # BitNetMCU training
@@ -28,7 +29,7 @@ def load_model(model_name, params):
     try:
         module = importlib.import_module('models')
         model_class = getattr(module, model_name)
-        return model_class(
+        kwargs = dict(
             network_width1=params["network_width1"],
             network_width2=params["network_width2"],
             network_width3=params["network_width3"],
@@ -36,6 +37,9 @@ def load_model(model_name, params):
             NormType=params["NormType"],
             WScale=params["WScale"]
         )
+        if 'num_classes' in params:
+            kwargs['num_classes'] = params['num_classes']
+        return model_class(**kwargs)
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
 
@@ -68,11 +72,21 @@ def log_positive_activations(model, writer, epoch, all_test_images, batch_size):
 
     return fraction_positive
 
+
+# Function to add L1 regularization on the mask
+def add_mask_regularization(model,  lambda_l1):
+    mask_layer = next((layer for layer in model.modules() if isinstance(layer, MaskingLayer)), None)
+
+    if mask_layer is None:
+        return 0
+    
+    l1_reg = lambda_l1 * torch.norm(mask_layer.mask, 1)
+    return l1_reg
+
+
 def train_model(model, device, hyperparameters, train_data, test_data):
     num_epochs = hyperparameters["num_epochs"]
     learning_rate = hyperparameters["learning_rate"]
-    step_size = hyperparameters["step_size"]
-    lr_decay = hyperparameters["lr_decay"]
     halve_lr_epoch = hyperparameters.get("halve_lr_epoch", -1)
     runname =  create_run_name(hyperparameters)
 
@@ -99,9 +113,13 @@ def train_model(model, device, hyperparameters, train_data, test_data):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     if hyperparameters["scheduler"] == "StepLR":
-        scheduler = StepLR(optimizer, step_size=step_size, gamma=lr_decay)
+        scheduler = StepLR(optimizer, step_size=hyperparameters["step_size"], gamma=hyperparameters["lr_decay"])
     elif hyperparameters["scheduler"] == "Cosine":
-        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)
+        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)    
+    elif hyperparameters["scheduler"] == "CosineWarmRestarts":
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=hyperparameters["T_0"], T_mult=hyperparameters["T_mult"], eta_min=0)
+    else:
+        raise ValueError("Invalid scheduler")
 
     criterion = nn.CrossEntropyLoss()
 
@@ -125,6 +143,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
+                if epoch < hyperparameters['prune_epoch']:
+                    loss += add_mask_regularization(model, hyperparameters["lambda_l1"])
                 loss.backward()
                 optimizer.step()
                 train_loss.append(loss.item())
@@ -142,6 +162,8 @@ def train_model(model, device, hyperparameters, train_data, test_data):
                 outputs = model(images)
                 _, predicted = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
+                if epoch < hyperparameters['prune_epoch']:
+                    loss += add_mask_regularization(model, hyperparameters["lambda_l1"])
                 loss.backward()
                 optimizer.step()
                 train_loss.append(loss.item())
@@ -153,6 +175,7 @@ def train_model(model, device, hyperparameters, train_data, test_data):
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.5
             print(f"Learning rate halved at epoch {epoch + 1}")
+
 
         trainaccuracy = correct / len(train_loader.dataset) * 100
 
@@ -202,6 +225,11 @@ def train_model(model, device, hyperparameters, train_data, test_data):
 
         print()
 
+        if epoch + 1 == hyperparameters ["prune_epoch"]:
+            for m in model.modules():
+                if isinstance(m, MaskingLayer):            
+                    pruned_channels, remaining_channels = m.prune_channels(prune_number=hyperparameters['prune_groupstoprune'], groups=hyperparameters['prune_totalgroups'])
+
         writer.add_scalar('Loss/train', np.mean(train_loss), epoch+1)
         writer.add_scalar('Accuracy/train', trainaccuracy, epoch+1)
         writer.add_scalar('Loss/test', np.mean(test_loss), epoch+1)
@@ -237,31 +265,67 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the MNIST dataset
+    # Dataset selection (MNIST default, EMNIST optional)
+    dataset_name = hyperparameters.get("dataset", "MNIST").upper()
+
+    if dataset_name == "MNIST":
+        num_classes = 10
+        mean, std = (0.1307,), (0.3081,)
+        base_dataset_train = datasets.MNIST
+        base_dataset_test = datasets.MNIST
+        dataset_kwargs = {"train": True}
+        dataset_kwargs_test = {"train": False}
+    elif dataset_name.startswith("EMNIST"):
+        # Expected format: EMNIST or EMNIST_BALANCED, EMNIST_BYCLASS etc.
+        # Torchvision subsets: 'byclass'(62), 'bymerge'(47), 'balanced'(47), 'letters'(37), 'digits'(10), 'mnist'(10)
+        split = dataset_name.split('_')[1].lower() if '_' in dataset_name else 'balanced'
+        # Map common names
+        split_alias = { 'BALANCED':'balanced', 'BYCLASS':'byclass', 'BYMERGE':'bymerge', 'LETTERS':'letters', 'DIGITS':'digits', 'MNIST':'mnist'}
+        split = split_alias.get(split.upper(), split)
+        # class counts per split
+        split_classes = { 'byclass':62, 'bymerge':47, 'balanced':47, 'letters':37, 'digits':10, 'mnist':10 }
+        num_classes = split_classes.get(split, 47)
+        # EMNIST uses same normalization as MNIST typically
+        mean, std = (0.1307,), (0.3081,)
+        from torchvision.datasets import EMNIST
+        base_dataset_train = EMNIST
+        base_dataset_test = EMNIST
+        dataset_kwargs = {"split": split, "train": True}
+        dataset_kwargs_test = {"split": split, "train": False}
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
+
     transform = transforms.Compose([
-        transforms.Resize((16, 16)),  # Resize images to 16x16
+        transforms.Resize((16, 16)),
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize(mean, std)
     ])
 
-    train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
-    test_data = datasets.MNIST(root='data', train=False, transform=transform)
+    train_data = base_dataset_train(root='data', transform=transform, download=True, **dataset_kwargs)
+    test_data = base_dataset_test(root='data', transform=transform, download=True, **dataset_kwargs_test)
 
     if hyperparameters["augmentation"]:
         # Data augmentation for training data
         augmented_transform = transforms.Compose([
-            # 10,10 seems to be best combination
             transforms.RandomRotation(degrees=hyperparameters["rotation1"]),
-            transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),   # both are needed for best results.
-            transforms.Resize((16, 16)),  # Resize images to 16x16
+            transforms.RandomAffine(degrees=hyperparameters["rotation2"], translate=(0.1, 0.1), scale=(0.9, 1.1)),
+            transforms.RandomApply([
+                transforms.ElasticTransform(alpha=40.0, sigma=4.0)
+            ], p=hyperparameters["elastictransformprobability"]),
+            transforms.Resize((16, 16)),
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize(mean, std)
         ])
 
-        augmented_train_data = datasets.MNIST(root='data', train=True, transform=augmented_transform)
+        augmented_train_data = base_dataset_train(root='data', transform=augmented_transform, download=True, **dataset_kwargs)
         train_data = ConcatDataset([train_data, augmented_train_data])
 
-    model = load_model(hyperparameters["model"], hyperparameters).to(device)
+    # Pass num_classes dynamically to model
+    hyperparameters['num_classes'] = num_classes
+    model = load_model(hyperparameters["model"], {**hyperparameters, 'num_classes': num_classes})
+    # If model class supports num_classes argument, it will be used. Otherwise ignore.
+    if hasattr(model, 'to'):
+        model = model.to(device)
 
     summary(model, input_size=(1, 16, 16))  # Assuming the input size is (1, 16, 16)
 

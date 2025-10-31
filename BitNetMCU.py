@@ -403,7 +403,16 @@ class QuantizedModel:
                 }
                 quantized_model.append(layer_info)
 
-        self.total_bits = totalbits
+            elif isinstance(layer, nn.MaxPool2d):
+                layer_info = {
+                    'layer_type': 'MaxPool2d',
+                    'layer_order': i,
+                    'kernel_size': layer.kernel_size,
+                    'stride': layer.stride
+                }
+                quantized_model.append(layer_info)
+
+        self.total_bits = totalbits                
         self.quantized_model = quantized_model
 
         return quantized_model, totalbits
@@ -482,18 +491,43 @@ class QuantizedModel:
                             output[:, g*(out_channels//groups):(g+1)*(out_channels//groups), i, j] = \
                                 np.sum(patch[:, np.newaxis, :, :, :] * group_weights, axis=(2, 3, 4))
 
-
-                # print(f'output: {output.shape}')
                 # Apply ReLU and quantize
                 output = np.maximum(output, 0)
                 max_val = np.max(output, axis=(1, 2, 3), keepdims=True)
+                # max_val = 256*127.0
+                # print(max_val / 256)
                 current_data = np.round(output * (127.0 / max_val)).clip(0, 127).astype(np.int8)
 
+            elif layer_info['layer_type'] == 'MaxPool2d':
+                pool_size = layer_info['kernel_size']
+                stride = layer_info['stride']
+                batch_size, channels, height, width = current_data.shape
+                pooled_height = (height - pool_size) // stride + 1
+                pooled_width = (width - pool_size) // stride + 1
+                pooled_output = np.zeros((batch_size, channels, pooled_height, pooled_width), dtype=current_data.dtype)
+
+                layer_info['incoming_x'] = current_data.shape[2]
+                layer_info['incoming_y'] = current_data.shape[3]
+
+                layer_info['outgoing_x'] = current_data.shape[2] // 2
+                layer_info['outgoing_y'] = current_data.shape[2] // 2
+
+                for i in range(pooled_height):
+                    for j in range(pooled_width):
+                        h_start = i * stride
+                        h_end = h_start + pool_size
+                        w_start = j * stride
+                        w_end = w_start + pool_size
+                        pooled_output[:, :, i, j] = np.max(current_data[:, :, h_start:h_end, w_start:w_end], axis=(2, 3))
+
+                current_data = pooled_output          
+                
 
         # no renormalization for the last layer
         weights = np.array(self.quantized_model[-1]['quantized_weights'])
         logits = np.dot(current_data, weights.T)  # Matrix multiplication
 
+        # print(logits)  
         if self.quantized_model[-1]['WScale']=='PerOutput':
             scale = np.array(self.quantized_model[-1]['quantized_scale']).transpose()
             logits = logits * scale
