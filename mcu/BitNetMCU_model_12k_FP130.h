@@ -8,6 +8,8 @@
 #ifndef BITNETMCU_MODEL_H
 #define BITNETMCU_MODEL_H
 
+#define MODEL_FCMNIST
+
 // Number of layers
 #define NUM_LAYERS 4
 

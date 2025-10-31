@@ -11,13 +11,14 @@ import argparse
 import yaml
 import seaborn as sns
 import importlib
+from models import MaskingLayer
 
 # Export quantized model from saved checkpoint
 # cpldcpu 2024-04-14
 # Note: Hyperparameters are used to generated the filename
 #---------------------------------------------
 
-showplots = True # display plots with statistics
+showplots = False # display plots with statistics
 
 def create_run_name(hyperparameters):
     runname = hyperparameters["runtag"] + '_' + hyperparameters["model"] + ('_Aug' if hyperparameters["augmentation"] else '') + '_BitMnist_' + hyperparameters["QuantType"] + "_width" + str(hyperparameters["network_width1"]) + "_" + str(hyperparameters["network_width2"]) + "_" + str(hyperparameters["network_width3"])  + "_epochs" + str(hyperparameters["num_epochs"])
@@ -25,21 +26,25 @@ def create_run_name(hyperparameters):
     return runname
 
 def load_model(model_name, params):
+    """Instantiate model; forwards num_classes if provided."""
     try:
         module = importlib.import_module('models')
         model_class = getattr(module, model_name)
-        return model_class(
+        kwargs = dict(
             network_width1=params["network_width1"],
             network_width2=params["network_width2"],
             network_width3=params["network_width3"],
             QuantType=params["QuantType"],
             NormType=params["NormType"],
-            WScale=params["WScale"]
+            WScale=params["WScale"],
         )
+        if 'num_classes' in params:
+            kwargs['num_classes'] = params['num_classes']
+        return model_class(**kwargs)
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
-
-def export_to_hfile(quantized_model, filename, runname):
+    
+def export_to_hfile(quantized_model, filename, runname, modelname=''):
     """
     Exports the quantized model to an Ansi-C header file.
 
@@ -54,8 +59,8 @@ def export_to_hfile(quantized_model, filename, runname):
         raise ValueError("quantized_model is empty or None")
 
     # determine maximum number of activations per layer
-    # max_n_activations = max([layer['outgoing_weights']  for layer in quantized_model.quantized_model])
-    max_n_activations = 128
+    max_n_activations = max([layer['incoming_weights']  for layer in quantized_model.quantized_model if 'incoming_weights' in layer])
+    # max_n_activations = 128
 
     with open(filename, 'w') as f:
         f.write(f'// Automatically generated header file\n')
@@ -67,6 +72,9 @@ def export_to_hfile(quantized_model, filename, runname):
 
         f.write('#ifndef BITNETMCU_MODEL_H\n')
         f.write('#define BITNETMCU_MODEL_H\n\n')
+
+        f.write(f'// Model class name as defined in models.py\n')
+        f.write(f'#define MODEL_{modelname}\n\n')
 
         f.write(f'// Number of layers\n')
         f.write(f'#define NUM_LAYERS {len(quantized_model.quantized_model)}\n\n')
@@ -107,8 +115,8 @@ def export_to_hfile(quantized_model, filename, runname):
                     levels = np.array([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
                                    0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0])
                     encoded_weights = np.argmin(np.abs(weights[:, :, np.newaxis] - levels), axis=2)
-                    QuantID = 32 + 4
-                elif quantization_type == '8bit':
+                    QuantID = 32 + 4  
+                elif quantization_type == '8bit': 
                     encoded_weights = np.floor(weights).astype(data_type) & 255  # twos complement encoding
                     QuantID =  8 + 8
                 elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
@@ -133,7 +141,7 @@ def export_to_hfile(quantized_model, filename, runname):
                 f.write(f'// QuantType: {quantization_type}\n')
 
                 f.write(f'#define {layer}_active\n')
-                f.write(f'#define {layer}_bitperweight {QuantID}\n')
+                f.write(f'#define {layer}_bitperweight {QuantID} \n')
                 f.write(f'#define {layer}_incoming_weights {incoming_weights}\n')
                 f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
 
@@ -176,11 +184,28 @@ def export_to_hfile(quantized_model, filename, runname):
                 for i, data in enumerate(weights.flatten()):
                     if i % 16 == 0:
                         f.write('\n\t')
-                    f.write(f'{data},')
-                f.write('\n};\n\n')
+                    f.write(f'{int(data)},')
+                f.write('\n};\n\n')                
 
-                print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
+                print(f'Layer: {layer} Conv2d bpw: {bpw} {in_channels} -> {out_channels} groups:{groups} Kernel: {kernel_size}x{kernel_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')                
 
+            elif layer_info['layer_type'] == 'MaxPool2d':
+                pool_size = layer_info['kernel_size']
+                incoming_x = layer_info['incoming_x']
+                incoming_y = layer_info['incoming_y']
+                outgoing_x = layer_info['outgoing_x']
+                outgoing_y = layer_info['outgoing_y']
+
+                f.write(f'#define {layer}_active\n')
+                f.write(f'#define {layer}_type MaxPool2d\n')
+                f.write(f'#define {layer}_pool_size {pool_size}\n')
+                f.write(f'#define {layer}_incoming_x {incoming_x}\n')
+                f.write(f'#define {layer}_incoming_y {incoming_y}\n')
+                f.write(f'#define {layer}_outgoing_x {outgoing_x}\n')
+                f.write(f'#define {layer}_outgoing_y {outgoing_y}\n\n')
+
+                print(f'Layer: {layer} MaxPool2d Pool Size: {pool_size} Incoming: {incoming_x}x{incoming_y} Outgoing: {outgoing_x}x{outgoing_y}')
+               
         f.write('#endif\n')
 
 def plot_test_images(test_loader):
@@ -199,20 +224,21 @@ def plot_test_images(test_loader):
 
 def print_stats(quantized_model):
     for layer_info in quantized_model.quantized_model:
-        weights = np.array(layer_info['quantized_weights'])
-        print()
-        print(f'Layer: {layer_info["layer_order"]}, Max: {np.max(weights)}, Min: {np.min(weights)}, Mean: {np.mean(weights)}, Std: {np.std(weights)}')
+        if layer_info['layer_type'] == 'BitLinear' or layer_info['layer_type'] == 'BitConv2d':
+            weights = np.array(layer_info['quantized_weights'])
+            print()
+            print(f'Layer: {layer_info["layer_order"]}, Max: {np.max(weights)}, Min: {np.min(weights)}, Mean: {np.mean(weights)}, Std: {np.std(weights)}')
 
-        values, counts = np.unique(weights, return_counts=True)
-        probabilities = counts / np.sum(counts)
+            values, counts = np.unique(weights, return_counts=True)
+            probabilities = counts / np.sum(counts)
 
-        print(f'Values: {values}')
-        print(f'Percent: {(probabilities * 100)}')
+            print(f'Values: {values}')
+            print(f'Percent: {(probabilities * 100)}')
 
-        number_of_codes = 2**layer_info['bpw']
-        entropy = -np.sum(probabilities * np.log2(probabilities))
-        print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
-
+            number_of_codes = 2**layer_info['bpw'] 
+            entropy = -np.sum(probabilities * np.log2(probabilities))
+            print(f'Entropy: {entropy:.2f} bits. Code capacity used: {entropy / np.log2(number_of_codes) * 100} %')
+  
 
 def plot_statistics(quantized_model):
     # Step 1: Extract the weights of the first layer
@@ -280,19 +306,57 @@ def plot_weight_histograms(quantized_model):
     fig = plt.figure(figsize=(10, 10))
 
     for layer_index, layer in enumerate(quantized_model.quantized_model):
-        layer_weights = np.array(layer['quantized_weights'])
-        bpw = layer['bpw']
+        if layer['layer_type'] == 'BitConv2d' or layer['layer_type'] == 'BitLinear':
+            layer_weights = np.array(layer['quantized_weights'])
+            bpw = layer['bpw']
 
-        flattened_weights = layer_weights.flatten()
+            flattened_weights = layer_weights.flatten()
 
-        ax = fig.add_subplot(len(quantized_model.quantized_model), 1, layer_index + 1)
+            ax = fig.add_subplot(len(quantized_model.quantized_model), 1, layer_index + 1)
 
-        # ax.hist(flattened_weights, width=1, bins='auto')
-        sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
-        ax.set_title(f'Layer {layer_index+1} Weight Distribution')
+            # ax.hist(flattened_weights, width=1, bins='auto')
+            sns.histplot(flattened_weights, bins=2**bpw, ax=ax, kde=True)
+            ax.set_title(f'Layer {layer_index+1} Weight Distribution')
 
     plt.tight_layout()
     plt.show(block=False)
+
+def print_masking_layers(model):
+    masking_layer_count = 0
+    for name, module in model.named_modules():
+        if isinstance(module, MaskingLayer):
+            masking_layer_count += 1
+            mask_params = module.mask.data
+            # mask = torch.sigmoid(mask_params )
+            mask = mask_params
+            active_channels = torch.sum(mask > 0.5).item()
+            total_channels = len(mask)
+            active_percentage = (active_channels / total_channels) * 100
+            print(mask_params)
+            print(f"SoftMaskLayer found in {name}:")
+            print(f"  Total channels: {total_channels}")
+            print(f"  Active channels (mask > 0.5): {active_channels}")
+            print(f"  Pruned channels (mask <= 0.5): {total_channels - active_channels}")
+            print(f"  Active percentage: {active_percentage:.2f}%")
+            
+            print("  Mask parameter statistics:")
+            print(f"    Min: {mask_params.min().item():.4f}")
+            print(f"    Max: {mask_params.max().item():.4f}")
+            print(f"    Mean: {mask_params.mean().item():.4f}")
+            print(f"    Std: {mask_params.std().item():.4f}")
+
+            print("  Soft mask value histogram:")
+            hist = torch.histc(mask_params, bins=10)
+            bin_edges = torch.linspace(mask_params.min(), mask_params.max(), steps=11)
+            for i, count in enumerate(hist):
+                print(f"    {bin_edges[i]:.1f}-{bin_edges[i+1]:.1f}: {count.item():.0f}")
+            
+            print("\n")
+
+    if masking_layer_count == 0:
+        print("No SoftMaskLayers found in the model.")
+    else:
+        print(f"Total SoftMaskLayers found: {masking_layer_count}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training script')
@@ -315,26 +379,67 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the MNIST dataset
+    # Dataset selection (mirror training.py logic)
+    dataset_name = hyperparameters.get("dataset", "MNIST").upper()
+
+    if dataset_name == "MNIST":
+        num_classes = 10
+        mean, std = (0.1307,), (0.3081,)
+        base_dataset_train = datasets.MNIST
+        base_dataset_test = datasets.MNIST
+        dataset_kwargs = {"train": True}
+        dataset_kwargs_test = {"train": False}
+    elif dataset_name.startswith("EMNIST"):
+        split = dataset_name.split('_')[1].lower() if '_' in dataset_name else 'balanced'
+        split_alias = { 'BALANCED':'balanced', 'BYCLASS':'byclass', 'BYMERGE':'bymerge', 'LETTERS':'letters', 'DIGITS':'digits', 'MNIST':'mnist'}
+        split = split_alias.get(split.upper(), split)
+        split_classes = { 'byclass':62, 'bymerge':47, 'balanced':47, 'letters':37, 'digits':10, 'mnist':10 }
+        num_classes = split_classes.get(split, 47)
+        from torchvision.datasets import EMNIST
+        mean, std = (0.1307,), (0.3081,)
+        base_dataset_train = EMNIST
+        base_dataset_test = EMNIST
+        dataset_kwargs = {"split": split, "train": True}
+        dataset_kwargs_test = {"split": split, "train": False}
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
+
     transform = transforms.Compose([
-        transforms.Resize((16, 16)),  # Resize images to 16x16
+        transforms.Resize((16, 16)),
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize(mean, std)
     ])
 
-    train_data = datasets.MNIST(root='data', train=True, transform=transform, download=True)
-    test_data = datasets.MNIST(root='data', train=False, transform=transform)
+    # Only test set strictly needed here, but keep parity
+    train_data = base_dataset_train(root='data', transform=transform, download=True, **dataset_kwargs)
+    test_data = base_dataset_test(root='data', transform=transform, download=True, **dataset_kwargs_test)
+
+    hyperparameters['num_classes'] = num_classes
     # Create data loaders
     test_loader = DataLoader(test_data, batch_size=hyperparameters["batch_size"], shuffle=False)
 
     model = load_model(hyperparameters["model"], hyperparameters).to(device)
 
     print('Loading model...')
+    checkpoint_path = f'modeldata/{runname}.pth'
     try:
-        model.load_state_dict(torch.load(f'modeldata/{runname}.pth', weights_only=True))
+        state = torch.load(checkpoint_path, map_location='cpu')
     except FileNotFoundError:
-        print(f"The file 'modeldata/{runname}.pth' does not exist.")
+        print(f"The file '{checkpoint_path}' does not exist.")
         exit()
+
+    # Attempt load; if classifier size mismatch, rebuild with inferred num_classes from checkpoint
+    try:
+        model.load_state_dict(state, strict=True)
+    except RuntimeError as e:
+        if 'classifier.weight' in str(e):
+            saved_classes = state['classifier.weight'].shape[0]
+            print(f"Classifier size mismatch. Rebuilding model with num_classes={saved_classes} (was {hyperparameters.get('num_classes')}).")
+            hyperparameters['num_classes'] = saved_classes
+            model = load_model(hyperparameters["model"], hyperparameters).to(device)
+            model.load_state_dict(state, strict=True)
+        else:
+            raise
 
     print('Inference using the original model...')
     correct = 0
@@ -356,6 +461,8 @@ if __name__ == '__main__':
 
     # Print statistics
     print_stats(quantized_model)
+
+    print_masking_layers(model)
 
     if showplots:
         # plot_weights(quantized_model)
@@ -400,7 +507,7 @@ if __name__ == '__main__':
     print("Exporting model to header file")
     # export the quantized model to a header file
     # export_to_hfile(quantized_model, f'{exportfolder}/{runname}.h')
-    export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname)
-
+    export_to_hfile(quantized_model, f'BitNetMCU_model.h',runname, hyperparameters["model"])
+    
     if showplots:
         plt.show()
