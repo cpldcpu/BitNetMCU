@@ -3,6 +3,8 @@
 **Surpassing 99% MNIST Test Accuracy with Low-Bit Quantized Neural Networks on a low-end 32 Bit Microcontroller**
 
 ## Table of Contents
+- [BitNetMCU](#bitnetmcu)
+  - [Table of Contents](#table-of-contents)
 - [Introduction and Motivation](#introduction-and-motivation)
   - [Background](#background)
 - [Implementation of training code](#implementation-of-training-code)
@@ -30,8 +32,11 @@
   - [July 19, 2024: OCTAV Optimum Clipping](#july-19-2024-octav-optimum-clipping)
   - [July 26, 2024: NormalFloat4 (NF4) Quantization](#july-26-2024-normalfloat4-nf4-quantization)
   - [Aug 3rd, 2024: Stepped Learning Rate Schedule](#aug-3rd-2024-stepped-learning-rate-schedule)
-  - [Aug 31st, 2025: Porting to CH32V002 and newest version of CH32fun](#aug-31st-2025-porting-to-ch32v002-and-newest-version-of-ch32fun)
-    - [Execution Time Comparison between CH32V002 and CH3V003](#execution-time-comparison-between-ch32v002-and-ch3v003)
+  - [Aug 31st, 2024: Porting to CH32V002 and newest version of CH32fun](#aug-31st-2024-porting-to-ch32v002-and-newest-version-of-ch32fun)
+    - [Execution Time Comparison between CH32V002 and CH32V003](#execution-time-comparison-between-ch32v002-and-ch32v003)
+  - [Jan 2, 2026: Finally introducing Ternary (1.58-bit) Inference](#jan-2-2026-finally-introducing-ternary-158-bit-inference)
+    - [Ternary Packing Scheme](#ternary-packing-scheme)
+    - [Verification](#verification)
 - [References](#references)
 
 
@@ -800,6 +805,103 @@ is due to added waitstates in the parts of the code that were executed from Flas
 Code execution from flash degrades performance significantly for both V003 and V002. Due to the added waitstates, the V002 takes 48% longer, which is roughly proportional to the increase in memory access timing. The improvements from the fast multiplication can barely compensate for this. 
 
 Note that the slowdown for execution from flash depends on the fraction of 16 bit instructions in the code, as 32 bit fetches may partially hide latency. Note that the V002 has 4KB SRAM vs. 2KB in the V003 which allows for more code to be executed from SRAM.
+
+## Jan 2, 2026: Finally introducing Ternary (1.58-bit) Inference
+
+The original BitNet paper[^4] heavily emphasized ternary quantization as a solution to compress neural network weights and was the original inspriation for starting BitNetMCU. However, even though I had already implemented training for ternary quantization I never implemented the inference code for the microcontroller.
+
+One of the reasons was that ternary quantization is quite cumbersome to store efficiently and unpack the values without too much overhead on a simple MCU. Furthermore, the benefit of ternary quantization was not a significant as the initial paper suggested. As shown above, for very extreme quantization below 4 bit, the number of total weights in the fc-layer and the number of bits per weight can be traded off. Hence, there is little benefit in going to ternary quantization if over 2 bit or 4 bit.
+
+When implementing CNNs I noticed, however, that there was a benefit in quantizing the first layer after the depth-wise CNN to low bits to improve regularization. This has the side benefit of also reducing model size, since the first fc-layer consumes the most parameters. 2-bit worked quite well. However, ternary quantization allows using more CNN channels at the same model size. One issue with binary quantization is the lack of a zero weight, which does not allow the model to "ignore" certain features from the CNN channels.
+
+| Configuration            | Width | BPW (fc1) | Ep. | Train Acc. | Test Acc. | Test Error | Model Size                  |
+|--------------------------|-------|-----------|--------|----------------|---------------|------------|-----------------------------|
+| 64-wide 2-bit            | 64    | 2-bit     | 60     | 99.40%         | 99.53%        | 0.47%      | 11.0 kB      |
+| 80-wide ternary          | 80    | Ternary   | 60     | 99.46%         | 99.52%        | 0.48%      | 11.42 kB    |
+
+### Ternary Packing Scheme
+
+Ternary quantization encodes weights as {-1, 0, +1}, requiring approximately 1.58 bits per weight (log₂(3) ≈ 1.585). There is a clever way to encode each "trit" using a base-3 scheme and unpack it by using successive multiplication with three as described in [compilade.net/blog/ternary-packing](https://compilade.net/blog/ternary-packing).
+
+This encoding scheme encodes one trit as 0,1 or 2. We use the following mapping to simplify detection of zero during unpacking.
+
+- `+1 → 0` (binary 00)
+- `-1 → 1` (binary 01)
+- ` 0 → 2` (binary 10)
+
+We pack 10 trits into 16 bits, as this simplifies decoding in a 32 bit register. This encoding is supristingly efficient, using 1.6 bits per 1.585 bit weight, wasting only 0.15 bits per 16 bit word (less than 1%).
+
+**Packing (example in C)**
+```c
+// Pack 10 trits {-1,0,1} into 16 bits
+uint16_t pack_10_trits(const int8_t* trits) {
+    uint32_t packed = 0;
+    for (int i = 0; i < 10; i++) {
+        packed = packed * 3 + (trits[i] + 1);  // Map {-1,0,1} to {0,1,2}
+    }
+    // Apply ceiling division for fixed-point representation
+    // 3^10 = 59049, fits in 16 bits (65536 > 59049)
+    packed = (packed * 65536 + 59048) / 59049;
+    return (uint16_t)packed;
+}
+```
+Layer input sizes are automatically padded to multiples of 10 (with zero weights) during export in the python code.
+
+**Inference code**
+```c
+    const uint16_t *weightidx16 = (const uint16_t *)weights;
+    weightidx16 += i * (n_input / 10);  // Offset to current output's weights
+
+    for (uint32_t k = 0; k < n_input; k += 10) {
+        uint32_t weightChunk = *weightidx16++;
+
+        for (uint32_t j = 0; j < 10; j++) {
+            weightChunk *= 3;
+            if (!(weightChunk & 0x20000)) {     // bit 17 = 0 means non-zero weight
+                int32_t in = *activations_idx;
+                sum += (weightChunk & 0x10000) ? -in : in;  // bit 16: sign
+            }
+            activations_idx++;
+            weightChunk &= 0xFFFF;              // Clear upper bits
+        }
+    }
+```
+
+### Verification
+
+One interesting aspect of ternary encoding is that it is using the code space very efficiently. The effective shannon entropy of the ternary layer (Layer 11) is 1.51 bits, which is 95% of the theoretical maximum. The 4bit encoded layer (Layer 13) is only using 85% of the code capacity due to the tendency of the weights to cluster around zero (NF4 is a way to address this).
+
+```
+Layer: 11, Max: 1.0, Min: -1.0, Mean: -0.027180989583333332, Std: 0.7114279186176237
+Values: [-1.  0.  1.]
+Percent: [26.70247396 49.31315104 23.984375  ]
+Entropy: 1.51 bits. Code capacity used: 94.10502691373009 %
+
+Layer: 13, Max: 7.5, Min: -7.5, Mean: -0.22672526041666666, Std: 2.654784268157332
+Values: [-7.5 -6.5 -5.5 -4.5 -3.5 -2.5 -1.5 -0.5  0.5  1.5  2.5  3.5  4.5  5.5
+  6.5  7.5]
+Percent: [ 1.23697917  1.10677083  2.60416667  3.59700521  5.89192708  7.19401042
+ 11.80013021 18.88020833 19.30338542 11.06770833  6.78710938  4.93164062
+  2.76692708  1.66015625  0.79752604  0.37434896]
+Entropy: 3.41 bits. Code capacity used: 85.146564213666 %
+...
+Total number of bits: 93568.0 (11.421875 kbytes)
+inference of quantized model
+Accuracy/Test of quantized model: 99.45 %
+```
+
+Verification of inference between Python and C shows only one mismatch out of 10000 test images.
+
+```
+Total number of bits: 93568.0 (11.421875 kbytes)
+Verifying inference of quantized model in Python and C
+ 2995 Mismatch between inference engines found. Prediction C: 8 Prediction Python: 6 True: 6
+size of test data: 10000
+Mispredictions C: 56 Py: 55
+Overall accuracy C: 99.44 %
+Overall accuracy Python: 99.45 %
+Mismatches between engines: 1 (0.01%)
+```
 
 # References
 

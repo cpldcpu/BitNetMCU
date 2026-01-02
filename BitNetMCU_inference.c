@@ -113,6 +113,27 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk <<= 2;
                 }
             }
+        } else if (bits_per_weight == 64) {  // Ternary: 10 trits packed in 16 bits
+            const uint16_t *weightidx16 = (const uint16_t *)weights;
+            weightidx16 += i * (n_input / 10);  // Jump to current output's weights
+
+            for (uint32_t k = 0; k < n_input; k += 10) {
+                uint32_t weightChunk = *weightidx16++;
+
+                for (uint32_t j = 0; j < 10; j++) {
+#if defined(CH32V003)
+                    weightChunk += (weightChunk << 1);  // *= 3 using shift+add (BEFORE extracting trit)
+#else
+                    weightChunk *= 3;  // Multiply BEFORE extracting trit
+#endif
+                    if (!(weightChunk & 0x20000)) {  // bit 17 = 0 means non-zero weight
+                        int32_t in = *activations_idx;
+                        sum += (weightChunk & 0x10000) ? -in : in;  // bit 16: sign
+                    }
+                    activations_idx++;
+                    weightChunk &= 0xFFFF;  // Clear upper bits for next iteration
+                }
+            }
         // Multiplier-less inference for CH32V003
 // #if defined(__riscv) && !defined(__riscv_mul)
 #if defined(CH32V003) 

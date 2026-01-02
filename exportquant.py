@@ -124,8 +124,60 @@ def export_to_hfile(quantized_model, filename, runname, modelname=''):
                 elif quantization_type == 'FP130': # FP1.3.0 encoding (sign * 2^exp)
                     encoded_weights = ((weights < 0).astype(data_type) << 3) | (np.floor(np.log2(np.abs(weights)))).astype(data_type)
                     QuantID = 16 + 4
+                elif quantization_type == 'Ternary':
+                    # Ternary: 10 trits packed into 16 bits using base-3 encoding
+                    # Encoding: +1=0, -1=1, 0=2
+                    n_outputs, n_inputs = weights.shape
+
+                    # Pad to multiple of 10 if needed
+                    if n_inputs % 10 != 0:
+                        pad_size = 10 - (n_inputs % 10)
+                        print(f'WARNING: Ternary layer {layer} has {n_inputs} inputs, padding with {pad_size} zeros to align to 10')
+                        weights = np.pad(weights, ((0, 0), (0, pad_size)), mode='constant', constant_values=0)
+                        n_inputs = weights.shape[1]
+
+                    # Map {-1, 0, 1} to {1, 2, 0} for efficient unpacking
+                    trit_values = np.where(weights == 1, 0, np.where(weights == -1, 1, 2)).astype(np.uint32)
+
+                    # Pack 10 trits into 16 bits per row
+                    packed_row_size = n_inputs // 10
+                    packed_weights = np.zeros((n_outputs, packed_row_size), dtype=np.uint16)
+
+                    for row in range(n_outputs):
+                        for word_idx in range(packed_row_size):
+                            start = word_idx * 10
+                            chunk = trit_values[row, start:start+10]
+
+                            # Base-3 packing: MSB first
+                            value = 0
+                            for t in range(10):
+                                value = value * 3 + chunk[t]
+                            # Scale with ceiling: (value * 65536 + 59048) // 59049
+                            packed = (value * 65536 + 59048) // 59049
+                            packed_weights[row, word_idx] = packed
+
+                    QuantID = 64  # Unique ID for ternary (0x40)
+
+                    # Write ternary layer header (uint16_t arrays)
+                    f.write(f'// Layer: {layer}\n')
+                    f.write(f'// QuantType: {quantization_type} (10 trits per 16-bit word)\n')
+                    f.write(f'#define {layer}_active\n')
+                    f.write(f'#define {layer}_bitperweight {QuantID}\n')
+                    f.write(f'#define {layer}_incoming_weights {n_inputs}\n')
+                    f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
+
+                    f.write(f'const uint16_t {layer}_weights[] = {{')
+                    for i, data in enumerate(packed_weights.flatten()):
+                        if i % 10 == 0:
+                            f.write('\n\t')
+                        f.write(f'0x{data:04x},')
+                    f.write('\n};\n\n')
+
+                    print(f'Layer: {layer} Ternary: {n_inputs} inputs (padded), {outgoing_weights} outputs, {packed_weights.size} uint16 words')
+                    continue  # Skip standard 32-bit packing
                 else:
                     print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')
+                    continue
 
                 # pack bits into 32 bit words
                 weight_per_word = 32 // bpw
