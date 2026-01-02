@@ -38,6 +38,8 @@ def load_model(model_name, params):
             NormType=params["NormType"],
             WScale=params["WScale"],
         )
+        if 'cnn_width' in params:
+            kwargs['cnn_width'] = params['cnn_width']
         if 'num_classes' in params:
             kwargs['num_classes'] = params['num_classes']
         return model_class(**kwargs)

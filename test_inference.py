@@ -23,7 +23,7 @@ def load_model(model_name, params):
     try:
         module = importlib.import_module('models')
         model_class = getattr(module, model_name)
-        return model_class(
+        kwargs = dict(
             network_width1=params["network_width1"],
             network_width2=params["network_width2"],
             network_width3=params["network_width3"],
@@ -31,6 +31,9 @@ def load_model(model_name, params):
             NormType=params["NormType"],
             WScale=params["WScale"]
         )
+        if 'cnn_width' in params:
+            kwargs['cnn_width'] = params['cnn_width']
+        return model_class(**kwargs)
     except AttributeError:
         raise ValueError(f"Model {model_name} not found in models.py")
     

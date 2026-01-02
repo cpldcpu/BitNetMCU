@@ -97,28 +97,29 @@ class CNNMNIST(nn.Module):
     @cpldcpu 2024-April-19
 
     """
-    def __init__(self,network_width1=64,network_width2=64,network_width3=64,QuantType='Binary',WScale='PerTensor',NormType='RMS', num_classes: int = 10):
+    def __init__(self,network_width1=64,network_width2=64,network_width3=64,cnn_width=64,QuantType='Binary',WScale='PerTensor',NormType='RMS', num_classes: int = 10):
         super(CNNMNIST, self).__init__()
 
         self.network_width1 = network_width1
         self.network_width2 = network_width2
         self.network_width3 = network_width3
+        self.cnn_width = cnn_width
 
         self.model = nn.Sequential(
 
             # 256ch out , 99.5%
-            BitConv2d(1, 64, kernel_size=3, stride=1, padding=(0,0),  groups=1,QuantType='8bit',NormType='None', WScale=WScale),
+            BitConv2d(1, cnn_width, kernel_size=3, stride=1, padding=(0,0),  groups=1,QuantType='8bit',NormType='None', WScale=WScale),
             nn.ReLU(),
-            BitConv2d(64, 64, kernel_size=3, stride=1, padding=(0,0),  groups=64,QuantType='8bit',NormType='None', WScale=WScale),
+            BitConv2d(cnn_width, cnn_width, kernel_size=3, stride=1, padding=(0,0),  groups=cnn_width,QuantType='8bit',NormType='None', WScale=WScale),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),           
-            BitConv2d(64, 64, kernel_size=3, stride=1, padding=(0,0),  groups=64,QuantType='8bit',NormType='None', WScale=WScale),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            BitConv2d(cnn_width, cnn_width, kernel_size=3, stride=1, padding=(0,0),  groups=cnn_width,QuantType='8bit',NormType='None', WScale=WScale),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),           
+            nn.MaxPool2d(kernel_size=2, stride=2),
 
             nn.Flatten(),
             # MaskingLayer(96*4),   # learnable masking layer for auto-pruning
-            BitLinear(64*4 , network_width1,QuantType='2bitsym',NormType=NormType, WScale=WScale),
+            BitLinear(cnn_width*4 , network_width1,QuantType='2bitsym',NormType=NormType, WScale=WScale),
             nn.ReLU(),
             BitLinear(network_width1, network_width2,QuantType=QuantType,NormType=NormType, WScale=WScale),
             nn.ReLU()

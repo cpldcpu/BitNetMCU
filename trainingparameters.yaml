@@ -43,6 +43,7 @@ prune_groupstoprune: 32   # number of groups to prune
 prune_totalgroups: 96     # total number of groups. e.g. if there are 384 channels and 96 groups, then each group has 4 channels
 
 # Model parameters
+cnn_width: 64       # Width of CNN layers (CNNMNIST only)
 network_width1: 96
 network_width2: 64
 network_width3: 0
