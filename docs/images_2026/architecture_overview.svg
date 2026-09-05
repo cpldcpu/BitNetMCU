@@ -1,0 +1,191 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1560' height='620' viewBox='0 0 1560 620' font-family='Segoe UI, Helvetica, Arial, sans-serif'>
+<defs><marker id='arr' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'><path d='M0,0 L10,5 L0,10 z' fill='#1f2933'/></marker></defs>
+<rect x='0' y='0' width='1560' height='620' fill='white'/>
+<rect x='8' y='8' width='1544' height='604' rx='18' fill='#f4f5f7' stroke='#d9dce3'/>
+<text x='780.0' y='40' text-anchor='middle' font-size='19' font-weight='700' fill='#1f2933'>From dense to convolution-like: the fc-kernel front-ends of this study (16x16 input, NF4 / A4, MCU-exact)</text>
+<text x='185.0' y='78' text-anchor='middle' font-size='13' font-weight='700' fill='#1f2933'>dense FC</text>
+<rect x='137.0' y='96' width='96' height='96' fill='white' fill-opacity='1.0' stroke='#7a8494' stroke-width='1'/>
+<line x1='161.0' y1='96' x2='161.0' y2='192' stroke='#eceef2'/>
+<line x1='137.0' y1='120.0' x2='233.0' y2='120.0' stroke='#eceef2'/>
+<line x1='185.0' y1='96' x2='185.0' y2='192' stroke='#eceef2'/>
+<line x1='137.0' y1='144.0' x2='233.0' y2='144.0' stroke='#eceef2'/>
+<line x1='209.0' y1='96' x2='209.0' y2='192' stroke='#eceef2'/>
+<line x1='137.0' y1='168.0' x2='233.0' y2='168.0' stroke='#eceef2'/>
+<rect x='137.0' y='96' width='96' height='96' fill='#e6e6ea' fill-opacity='0.55' stroke='#7a8494' stroke-width='1'/>
+<text x='185.0' y='148.0' text-anchor='middle' font-size='10.5'  fill='#4b5563'>256 px = 1 token</text>
+<text x='185.0' y='206' text-anchor='middle' font-size='10.5'  fill='#4b5563'>1 token x 256 px</text>
+<line x1='185.0' y1='212' x2='185.0' y2='300' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='67.0' y='304' width='236' height='36' rx='9' fill='#e6e6ea' stroke='#7a8494' />
+<text x='185.0' y='326.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>flatten: 256</text>
+<line x1='185.0' y1='340' x2='185.0' y2='366' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='67.0' y='368' width='236' height='50' rx='9' fill='#e2d6f3' stroke='#7a8494' />
+<text x='185.0' y='391.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>fc head 256-64-64-64</text>
+<text x='185.0' y='407.0' text-anchor='middle' font-size='10' fill='#4b5563'>4-bit codes, recip8 requantization</text>
+<line x1='185.0' y1='418' x2='185.0' y2='444' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='67.0' y='446' width='236' height='34' rx='9' fill='#fff6d5' stroke='#7a8494' />
+<text x='185.0' y='467.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>10 classes</text>
+<rect x='67.0' y='502' width='236' height='74' rx='9' fill='#e6e6ea' stroke='#7a8494' stroke-dasharray='6,4'/>
+<text x='185.0' y='526' text-anchor='middle' font-size='12.5' font-weight='700' fill='#1f2933'>99.07 %</text>
+<text x='185.0' y='546' text-anchor='middle' font-size='11'  fill='#4b5563'>12.3 kB  |  25k MACs</text>
+<text x='185.0' y='564' text-anchor='middle' font-size='11'  fill='#4b5563'>weight reuse 1.0</text>
+<text x='475.0' y='78' text-anchor='middle' font-size='13' font-weight='700' fill='#1f2933'>8x8 quadrants, unshared</text>
+<rect x='427.0' y='96' width='96' height='96' fill='white' fill-opacity='1.0' stroke='#7a8494' stroke-width='1'/>
+<line x1='451.0' y1='96' x2='451.0' y2='192' stroke='#eceef2'/>
+<line x1='427.0' y1='120.0' x2='523.0' y2='120.0' stroke='#eceef2'/>
+<line x1='475.0' y1='96' x2='475.0' y2='192' stroke='#eceef2'/>
+<line x1='427.0' y1='144.0' x2='523.0' y2='144.0' stroke='#eceef2'/>
+<line x1='499.0' y1='96' x2='499.0' y2='192' stroke='#eceef2'/>
+<line x1='427.0' y1='168.0' x2='523.0' y2='168.0' stroke='#eceef2'/>
+<rect x='427.0' y='96.0' width='48.0' height='48.0' fill='#cfe0f7' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<rect x='427.0' y='144.0' width='48.0' height='48.0' fill='#cfe0f7' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<rect x='475.0' y='96.0' width='48.0' height='48.0' fill='#cfe0f7' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<rect x='475.0' y='144.0' width='48.0' height='48.0' fill='#cfe0f7' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<text x='475.0' y='206' text-anchor='middle' font-size='10.5'  fill='#4b5563'>4 tokens x 64 px</text>
+<line x1='475.0' y1='212' x2='475.0' y2='222' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='357.0' y='226' width='236' height='50' rx='9' fill='#cfe0f7' stroke='#7a8494' />
+<text x='475.0' y='249.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>4 x own (64-32-32)</text>
+<text x='475.0' y='265.0' text-anchor='middle' font-size='10' fill='#4b5563'>four separate stems</text>
+<line x1='475.0' y1='276' x2='475.0' y2='302' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='357.0' y='304' width='236' height='36' rx='9' fill='#e6e6ea' stroke='#7a8494' />
+<text x='475.0' y='326.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>concat: 4x32 = 128</text>
+<line x1='475.0' y1='340' x2='475.0' y2='366' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='357.0' y='368' width='236' height='50' rx='9' fill='#e2d6f3' stroke='#7a8494' />
+<text x='475.0' y='391.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>fc head 128-64-64</text>
+<text x='475.0' y='407.0' text-anchor='middle' font-size='10' fill='#4b5563'>4-bit codes, recip8 requantization</text>
+<line x1='475.0' y1='418' x2='475.0' y2='444' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='357.0' y='446' width='236' height='34' rx='9' fill='#fff6d5' stroke='#7a8494' />
+<text x='475.0' y='467.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>10 classes</text>
+<rect x='357.0' y='502' width='236' height='74' rx='9' fill='#e6e6ea' stroke='#7a8494' stroke-dasharray='6,4'/>
+<text x='475.0' y='526' text-anchor='middle' font-size='12.5' font-weight='700' fill='#1f2933'>99.13 %</text>
+<text x='475.0' y='546' text-anchor='middle' font-size='11'  fill='#4b5563'>12.3 kB  |  25k MACs</text>
+<text x='475.0' y='564' text-anchor='middle' font-size='11'  fill='#4b5563'>weight reuse 1.0</text>
+<text x='765.0' y='78' text-anchor='middle' font-size='13' font-weight='700' fill='#1f2933'>8x8 quadrants, shared (C / D)</text>
+<rect x='717.0' y='96' width='96' height='96' fill='white' fill-opacity='1.0' stroke='#7a8494' stroke-width='1'/>
+<line x1='741.0' y1='96' x2='741.0' y2='192' stroke='#eceef2'/>
+<line x1='717.0' y1='120.0' x2='813.0' y2='120.0' stroke='#eceef2'/>
+<line x1='765.0' y1='96' x2='765.0' y2='192' stroke='#eceef2'/>
+<line x1='717.0' y1='144.0' x2='813.0' y2='144.0' stroke='#eceef2'/>
+<line x1='789.0' y1='96' x2='789.0' y2='192' stroke='#eceef2'/>
+<line x1='717.0' y1='168.0' x2='813.0' y2='168.0' stroke='#eceef2'/>
+<rect x='717.0' y='96.0' width='48.0' height='48.0' fill='#cdebc9' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<rect x='717.0' y='144.0' width='48.0' height='48.0' fill='#cdebc9' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<rect x='765.0' y='96.0' width='48.0' height='48.0' fill='#cdebc9' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<rect x='765.0' y='144.0' width='48.0' height='48.0' fill='#cdebc9' fill-opacity='0.7' stroke='#7a8494' stroke-width='1'/>
+<text x='765.0' y='206' text-anchor='middle' font-size='10.5'  fill='#4b5563'>4 tokens x 64 px</text>
+<line x1='765.0' y1='212' x2='765.0' y2='222' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='647.0' y='226' width='236' height='50' rx='9' fill='#cdebc9' stroke='#7a8494' />
+<text x='765.0' y='249.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>4 x shared (64-32-32)</text>
+<text x='765.0' y='265.0' text-anchor='middle' font-size='10' fill='#4b5563'>one stem, 4 calls, shared shift</text>
+<line x1='765.0' y1='276' x2='765.0' y2='302' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='647.0' y='304' width='236' height='36' rx='9' fill='#e6e6ea' stroke='#7a8494' />
+<text x='765.0' y='326.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>concat: 4x32 = 128</text>
+<line x1='765.0' y1='340' x2='765.0' y2='366' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='647.0' y='368' width='236' height='50' rx='9' fill='#e2d6f3' stroke='#7a8494' />
+<text x='765.0' y='391.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>fc head 128-64-64  /  128-96-96</text>
+<text x='765.0' y='407.0' text-anchor='middle' font-size='10' fill='#4b5563'>4-bit codes, recip8 requantization</text>
+<line x1='765.0' y1='418' x2='765.0' y2='444' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='647.0' y='446' width='236' height='34' rx='9' fill='#fff6d5' stroke='#7a8494' />
+<text x='765.0' y='467.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>10 classes</text>
+<rect x='647.0' y='502' width='236' height='74' rx='9' fill='#e6e6ea' stroke='#7a8494' stroke-dasharray='6,4'/>
+<text x='765.0' y='526' text-anchor='middle' font-size='12.5' font-weight='700' fill='#1f2933'>99.00 / 99.16 %</text>
+<text x='765.0' y='546' text-anchor='middle' font-size='11'  fill='#4b5563'>7.8 / 12.5 kB  |  25k / 35k MACs</text>
+<text x='765.0' y='564' text-anchor='middle' font-size='11'  fill='#4b5563'>weight reuse 1.4-1.6</text>
+<text x='1055.0' y='78' text-anchor='middle' font-size='13' font-weight='700' fill='#1f2933'>8x8 windows, stride 4, shared</text>
+<rect x='1007.0' y='96' width='96' height='96' fill='white' fill-opacity='1.0' stroke='#7a8494' stroke-width='1'/>
+<line x1='1031.0' y1='96' x2='1031.0' y2='192' stroke='#eceef2'/>
+<line x1='1007.0' y1='120.0' x2='1103.0' y2='120.0' stroke='#eceef2'/>
+<line x1='1055.0' y1='96' x2='1055.0' y2='192' stroke='#eceef2'/>
+<line x1='1007.0' y1='144.0' x2='1103.0' y2='144.0' stroke='#eceef2'/>
+<line x1='1079.0' y1='96' x2='1079.0' y2='192' stroke='#eceef2'/>
+<line x1='1007.0' y1='168.0' x2='1103.0' y2='168.0' stroke='#eceef2'/>
+<rect x='1007.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1007.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1007.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1031.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1031.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1031.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1055.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1055.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1055.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.28' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1007.0' y='96' width='48.0' height='48.0' fill='none' fill-opacity='0' stroke='#1f2933' stroke-width='1.6'/>
+<text x='1055.0' y='206' text-anchor='middle' font-size='10.5'  fill='#4b5563'>9 tokens x 64 px (overlapping)</text>
+<line x1='1055.0' y1='212' x2='1055.0' y2='222' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='937.0' y='226' width='236' height='50' rx='9' fill='#cdebc9' stroke='#7a8494' />
+<text x='1055.0' y='249.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>9 x shared (64-32-16)</text>
+<text x='1055.0' y='265.0' text-anchor='middle' font-size='10' fill='#4b5563'>one stem, 9 calls, shared shift</text>
+<line x1='1055.0' y1='276' x2='1055.0' y2='302' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='937.0' y='304' width='236' height='36' rx='9' fill='#e6e6ea' stroke='#7a8494' />
+<text x='1055.0' y='326.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>concat: 9x16 = 144</text>
+<line x1='1055.0' y1='340' x2='1055.0' y2='366' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='937.0' y='368' width='236' height='50' rx='9' fill='#e2d6f3' stroke='#7a8494' />
+<text x='1055.0' y='391.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>fc head 144-64-64</text>
+<text x='1055.0' y='407.0' text-anchor='middle' font-size='10' fill='#4b5563'>4-bit codes, recip8 requantization</text>
+<line x1='1055.0' y1='418' x2='1055.0' y2='444' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='937.0' y='446' width='236' height='34' rx='9' fill='#fff6d5' stroke='#7a8494' />
+<text x='1055.0' y='467.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>10 classes</text>
+<rect x='937.0' y='502' width='236' height='74' rx='9' fill='#e6e6ea' stroke='#7a8494' stroke-dasharray='6,4'/>
+<text x='1055.0' y='526' text-anchor='middle' font-size='12.5' font-weight='700' fill='#1f2933'>99.25 %</text>
+<text x='1055.0' y='546' text-anchor='middle' font-size='11'  fill='#4b5563'>8.1 kB  |  37k MACs</text>
+<text x='1055.0' y='564' text-anchor='middle' font-size='11'  fill='#4b5563'>weight reuse 2.2</text>
+<text x='1345.0' y='78' text-anchor='middle' font-size='13' font-weight='700' fill='#1f2933'>8x8 windows, stride 2, shared</text>
+<rect x='1297.0' y='96' width='96' height='96' fill='white' fill-opacity='1.0' stroke='#7a8494' stroke-width='1'/>
+<line x1='1321.0' y1='96' x2='1321.0' y2='192' stroke='#eceef2'/>
+<line x1='1297.0' y1='120.0' x2='1393.0' y2='120.0' stroke='#eceef2'/>
+<line x1='1345.0' y1='96' x2='1345.0' y2='192' stroke='#eceef2'/>
+<line x1='1297.0' y1='144.0' x2='1393.0' y2='144.0' stroke='#eceef2'/>
+<line x1='1369.0' y1='96' x2='1369.0' y2='192' stroke='#eceef2'/>
+<line x1='1297.0' y1='168.0' x2='1393.0' y2='168.0' stroke='#eceef2'/>
+<rect x='1297.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1297.0' y='108.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1297.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1297.0' y='132.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1297.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1309.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1309.0' y='108.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1309.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1309.0' y='132.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1309.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1321.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1321.0' y='108.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1321.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1321.0' y='132.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1321.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1333.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1333.0' y='108.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1333.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1333.0' y='132.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1333.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1345.0' y='96.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1345.0' y='108.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1345.0' y='120.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1345.0' y='132.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1345.0' y='144.0' width='48.0' height='48.0' fill='#fbd9a6' fill-opacity='0.16' stroke='#c9862a' stroke-width='0.8'/>
+<rect x='1297.0' y='96' width='48.0' height='48.0' fill='none' fill-opacity='0' stroke='#1f2933' stroke-width='1.6'/>
+<text x='1345.0' y='206' text-anchor='middle' font-size='10.5'  fill='#4b5563'>25 tokens x 64 px (overlapping)</text>
+<line x1='1345.0' y1='212' x2='1345.0' y2='222' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='1227.0' y='226' width='236' height='50' rx='9' fill='#cdebc9' stroke='#7a8494' />
+<text x='1345.0' y='249.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>25 x shared (64-32-8)</text>
+<text x='1345.0' y='265.0' text-anchor='middle' font-size='10' fill='#4b5563'>one stem, 25 calls, shared shift</text>
+<line x1='1345.0' y1='276' x2='1345.0' y2='302' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='1227.0' y='304' width='236' height='36' rx='9' fill='#e6e6ea' stroke='#7a8494' />
+<text x='1345.0' y='326.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>concat: 25x8 = 200</text>
+<line x1='1345.0' y1='340' x2='1345.0' y2='366' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='1227.0' y='368' width='236' height='50' rx='9' fill='#e2d6f3' stroke='#7a8494' />
+<text x='1345.0' y='391.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>fc head 200-64-64</text>
+<text x='1345.0' y='407.0' text-anchor='middle' font-size='10' fill='#4b5563'>4-bit codes, recip8 requantization</text>
+<line x1='1345.0' y1='418' x2='1345.0' y2='444' stroke='#1f2933' stroke-width='1.4' marker-end='url(#arr)'/>
+<rect x='1227.0' y='446' width='236' height='34' rx='9' fill='#fff6d5' stroke='#7a8494' />
+<text x='1345.0' y='467.0' text-anchor='middle' font-size='12' font-weight='600' fill='#1f2933'>10 classes</text>
+<rect x='1227.0' y='502' width='236' height='74' rx='9' fill='#e6e6ea' stroke='#7a8494' stroke-dasharray='6,4'/>
+<text x='1345.0' y='526' text-anchor='middle' font-size='12.5' font-weight='700' fill='#1f2933'>99.37 %</text>
+<text x='1345.0' y='546' text-anchor='middle' font-size='11'  fill='#4b5563'>9.7 kB  |  75k MACs</text>
+<text x='1345.0' y='564' text-anchor='middle' font-size='11'  fill='#4b5563'>weight reuse 3.8</text>
+<path d='M 314 146 l 32 0' fill='none' stroke='#9aa3b2' stroke-width='2' marker-end='url(#arr)'/>
+<text x='330' y='134' text-anchor='middle' font-size='10'  fill='#4b5563'>locality</text>
+<path d='M 604 146 l 32 0' fill='none' stroke='#9aa3b2' stroke-width='2' marker-end='url(#arr)'/>
+<text x='620' y='134' text-anchor='middle' font-size='10'  fill='#4b5563'>weight sharing</text>
+<path d='M 894 146 l 32 0' fill='none' stroke='#9aa3b2' stroke-width='2' marker-end='url(#arr)'/>
+<text x='910' y='134' text-anchor='middle' font-size='10'  fill='#4b5563'>overlap (stride 4)</text>
+<path d='M 1184 146 l 32 0' fill='none' stroke='#9aa3b2' stroke-width='2' marker-end='url(#arr)'/>
+<text x='1200' y='134' text-anchor='middle' font-size='10'  fill='#4b5563'>denser overlap (stride 2)</text>
+</svg>
