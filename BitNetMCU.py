@@ -52,13 +52,42 @@ class BitQuant:
         self.s = torch.nn.Parameter(torch.tensor(1.0))
         self.s.requires_grad = False  # no gradient for clipping scalar
 
+        # Activation quantization (set by the model builder / training script):
+        #   act_bits : 8 (default, per-token max, signed -128..127) or 4 (16 linear levels 0..15 for nonnegative tokens,
+        #              -8..7 for signed tokens, per-token max)
+        #   act_pow2 : True -> the per-token scale is rounded down to a power of two and codes are truncated (floor),
+        #              which is exactly what the MCU ShiftNorm does (x >> shift). False -> exact max scaling + rounding.
+        #   table_scale : >0 -> nonuniform (NF4) weight levels are rounded to multiples of 1/table_scale, i.e. to the
+        #              integer grid of the int16 product table T[a,w] = a * round(level_w * table_scale) on the MCU.
+        self.act_bits = 8
+        self.act_pow2 = False
+        self.act_unsigned = False   # True for layers fed by a ReLU (set by the model builder): nonnegative token codes
+        self.act_pow2_round = False # pow2 mode: round-to-nearest ((acc + 2^(sh-1)) >> sh on the device) instead of truncation
+        # pow2 mode removes every non-power-of-two scale from the graph, so the network cannot set its own softmax
+        # temperature any more (hidden layers are scale-free through ReLU + ShiftNorm, but the logits are not).
+        # The output layer therefore multiplies its logits by a learnable temperature exp(log_logit_scale); this is
+        # a positive per-model constant and invisible to the argmax on the device.
+        self.is_output = False
+        # act_group > 1: the per-token max (and hence the shift) is shared by groups of `act_group` consecutive tokens
+        # (e.g. the four 8x8 blocks of one image in PatchMNIST). Keeps the relative magnitude of the blocks intact
+        # through a power-of-two shift; on the device this is one max over the group's activations.
+        self.act_group = 1
+        # Requantization refinement for the pow2 (MCU-exact) path; integer-exact on the device:
+        #   act_mantissa : 'none' (plain shift) | 'max' (per token m in 8..15 so that m*max/8 just fits the range,
+        #                  one 4x4-bit multiply + >>3 per activation) | 'recipN' (per-token N-bit reciprocal
+        #                  s = floor(qmax*2^t/max), code = (acc*s) >> t; N = 8 matches the exact max scaling and is
+        #                  the recommended device mode: one N-bit multiply per activation + one reciprocal per token).
+        self.act_mantissa = 'none'
+        self.log_logit_scale = torch.nn.Parameter(torch.tensor(0.0))   # init 1.0, learned by Adam
+        self.table_scale = 0
+
         if self.QuantType in ['Binary', 'BinarySym']:
             self.bpw = 1
-        elif self.QuantType in ['2bitsym']:
+        elif self.QuantType in ['2bitsym', 'NF2']:
             self.bpw = 2
         elif self.QuantType in ['Ternary']:
             self.bpw = 1.6
-        elif self.QuantType in ['4bit', '4bitsym', 'FP130' , 'NF4']:
+        elif self.QuantType in ['4bit', '4bitsym', 'sint4', 'FP130' , 'NF4']:
             self.bpw = 4
         elif self.QuantType == '5bitsym':
             self.bpw = 5
@@ -69,6 +98,48 @@ class BitQuant:
 
         if not self.WScale in ['PerOutput', 'PerTensor']:
             raise AssertionError(f"Invalid WScale: {self.WScale}. Expected one of: 'PerTensor', 'PerOutput'")
+
+    NF4_LEVELS = [-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
+                  0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0]
+    # 4-level Lloyd-Max quantizer for a Gaussian (+-0.4528 sigma, +-1.510 sigma), normalized to the outer level:
+    NF2_LEVELS = [-1.0, -0.2998, 0.2998, 1.0]
+
+    def code_levels(self, device=None):
+        """Codebook levels in units of the quantization scale, i.e. u = w*scale takes values in this set.
+        For NF4 the levels are optionally rounded to the int16 product-table grid (table_scale)."""
+        if self.QuantType in ('NF4', 'NF2'):
+            lv = torch.tensor(self.NF4_LEVELS if self.QuantType == 'NF4' else self.NF2_LEVELS, device=device)
+            if self.table_scale > 0:
+                lv = torch.round(lv * self.table_scale) / self.table_scale
+            return lv
+        elif self.QuantType in ['2bitsym', '4bitsym', '5bitsym']:
+            n = 2 ** (self.bpw - 1)
+            return torch.arange(-n, n, device=device).float() + 0.5
+        elif self.QuantType in ['4bit', 'sint4', '8bit']:
+            n = 2 ** (self.bpw - 1)
+            return torch.arange(-n, n, device=device).float()
+        else:
+            raise AssertionError(f"code_levels not defined for QuantType {self.QuantType}")
+
+    def octav_cb(self, tensor, num_iterations=10, s=-1):
+        """Codebook-aware OCTAV: same fixed-point iteration as octav(), but the per-unit-s^2 MSE of the in-range
+        weights is measured empirically on the actual level set instead of the uniform-grid constant 4^-b/3.
+        For a uniform grid this recovers ~4^-b/3; for NF4 etc. it gives the matched clip."""
+        levels = self.code_levels(tensor.device)
+        bound = levels.abs().max()          # outermost level in units of scale; s = bound / scale
+        if s < 0:
+            s = tensor.abs().mean().clamp_(min=1e-5) * 0.25
+        a = tensor.abs()
+        for _ in range(num_iterations):
+            le = a <= s
+            gt = ~le
+            u = tensor[le] * (bound / s)     # in-range weights in level units
+            q, _ = self.quantize_list(u, levels)
+            C = ((u - q) ** 2).mean() / bound ** 2 if u.numel() > 0 else torch.tensor(4.0 ** -self.bpw / 3, device=tensor.device)
+            numerator = torch.sum(a[gt])
+            denominator = C * le.sum() + gt.sum()
+            s = numerator / denominator.clamp(min=1)
+        return s
 
     # Octave optimum clipping algorithm (C. Sakr et al., 2022)
     # see https://arxiv.org/abs/2206.06501
@@ -103,13 +174,18 @@ class BitQuant:
                 s = torch.stack([self.octav(row, 10) for row in w])
             else:
                 s = self.octav(w, 10, s)
+        elif algorithm == 'octav_cb':
+            if self.WScale=='PerOutput':
+                s = torch.stack([self.octav_cb(row, 10) for row in w])
+            else:
+                s = self.octav_cb(w, 10, s)
         elif algorithm == 'prop':
             if self.WScale=='PerOutput':
                 s = w.abs().max(dim=-1, keepdim=True)[0].clamp_(min=1e-5) / quantscale
             else:
                 s = w.abs().mean().clamp_(min=1e-5) / quantscale
         else:
-            raise AssertionError(f"Invalid algorithm: {algorithm}. Expected one of: 'octav', 'prop'")
+            raise AssertionError(f"Invalid algorithm: {algorithm}. Expected one of: 'octav', 'octav_cb', 'prop'")
 
         self.s = torch.nn.Parameter(s)
         self.s.requires_grad = False  # no gradient for clipping scalar
@@ -117,16 +193,80 @@ class BitQuant:
         return s
 
     def activation_quant(self, x):
-        """ Per-token quantization to 8 bits. No grouping is needed for quantization.
+        """ Per-token activation quantization (no grouping needed).
         Args:
-        x: an activation tensor with shape [n, d]
+        x: an activation tensor with shape [n, d] (last dim = token)
         Returns:
-        y: a quantized activation tensor with shape [n, d]
-        scale: scale factor for the quantization
+        y:     integer activation codes (as float tensor)
+        scale: per-token scale factor, x_quant = y / scale
         """
-        scale = 127.0 / x.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
-        y = (x * scale).round().clamp_(-128, 127)
+        xmax = x.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
+        if self.act_group > 1:
+            g = self.act_group
+            xmax = xmax.reshape(-1, g, 1).max(dim=1, keepdim=True).values.expand(-1, g, 1).reshape(-1, 1)
+        if self.act_bits == 8:
+            qmin, qmax = -128, 127
+        elif self.act_bits == 4:
+            qmin, qmax = (0, 15) if self.act_unsigned else (-8, 7)
+        else:
+            raise AssertionError(f"Unsupported act_bits: {self.act_bits}")
+
+        if self.act_pow2 and self.act_bits in (4, 8) and str(self.act_mantissa).startswith('recip'):
+            # Per-token fixed-point reciprocal: s = floor(qmax * 2^t / max) with s in [2^(b-1), 2^b) (b = bits of s),
+            # code = (acc * s) >> t  (or rounded).  One reciprocal per token, one b-bit multiply per activation; approaches
+            # the exact per-token max scaling as b grows.  Computed in float64: x is integer * 2^k, acc*s < 2^40.
+            b = int(self.act_mantissa[5:])
+            xd = x.double(); xm = xmax.double()
+            t = torch.ceil(torch.log2(xm / qmax)) + (b - 1)          # 2^t*qmax/max in [2^(b-1), 2^b]
+            p2t = torch.exp2(t)
+            sc = torch.floor(qmax * p2t / xm).clamp_(max=2 ** b - 1)   # integer s (the exact-power-of-two case is clamped)
+            prod = xd * sc / p2t
+            y = torch.floor(prod + 0.5) if self.act_pow2_round else torch.floor(prod)
+            return y.clamp_(qmin, qmax).float(), (sc / p2t).float()
+
+        if self.act_pow2:
+            # MCU ShiftNorm: power-of-two scale bringing the token max into [(qmax+1)/2, qmax+1), then truncation.
+            # (x is integer-valued times a power of two in this mode, so floor(x*scale) == acc >> shift exactly.)
+            top = qmax + 1
+            # largest k with xmax * 2^k < top  (i.e. xmax*2^k in [top/2, top))
+            scale = torch.exp2(torch.ceil(torch.log2(top / xmax)) - 1)
+            if self.act_pow2_round:
+                xs = torch.floor(x * scale + 0.5)
+            else:
+                xs = torch.floor(x * scale)
+            xs = xs.clamp_(qmin, top - 1)
+            gain = scale
+            if self.act_bits == 4 and self.act_mantissa == 'max':
+                # per token: m = floor((8*top - 1) / max_s) clamped to 8..15, so that m*max_s/8 < top
+                smax = xs.max(dim=-1, keepdim=True).values.clamp_(min=1)
+                if self.act_group > 1:
+                    g = self.act_group
+                    smax = smax.reshape(-1, g, 1).max(dim=1, keepdim=True).values.expand(-1, g, 1).reshape(-1, 1)
+                m = torch.floor((8 * top - 1) / smax).clamp_(8, 15)
+                xs = torch.floor(xs * m / 8)              # (x_s * m) >> 3, exact (integers < 2^24)
+                gain = gain * m / 8
+            y = xs.clamp(qmin, qmax)
+            return y, gain
+
+        else:
+            scale = qmax / xmax
+            y = (x * scale).round().clamp_(qmin, qmax)
         return y, scale
+
+    def quant_forward_pow2(self, x, w):
+        """Exact-MCU forward used when act_pow2 is set: no RMS normalization (ShiftNorm is the normalization),
+        activations dequantized by the power of two 2^act_bits (16 or 128) and weights kept in level units
+        (u / bound, bound = 2^(bpw-1) or 1 for NF4), so every value in the graph is an integer times a power of two
+        and the float computation reproduces the integer kernel bit-for-bit (as long as |int| < 2^24).
+        Returns (x_quant, w_quant) with straight-through gradients."""
+        x_int, x_scale = self.activation_quant(x)
+        qnorm = 2.0 ** self.act_bits / 2 if not self.act_unsigned else 2.0 ** self.act_bits
+        # signed: codes/128 (8-bit) or /8 (4-bit) ; unsigned: codes/16
+        x_quant = x * (x_scale / qnorm) + (x_int / qnorm - x * (x_scale / qnorm)).detach()
+        w_int, w_scale, _ = self.weight_quant(w)
+        bound = 1.0 if self.QuantType in ('NF4', 'NF2') else 2.0 ** (self.bpw - 1)
+        w_quant = w * (w_scale / bound) + (w_int / bound - w * (w_scale / bound)).detach()
+        return x_quant, w_quant
 
     def weight_quant(self, w):
         """ Per-tensor quantization.
@@ -140,7 +280,7 @@ class BitQuant:
 
         if self.QuantType == 'FP130':
            scale = 128.0 / self.s
-        elif self.QuantType == 'NF4':
+        elif self.QuantType in ('NF4', 'NF2'):
             scale = 1.0 / self.s
         elif self.QuantType == 'Ternary': # 1.58bits
             # scale = 1.0 / self.s
@@ -162,13 +302,14 @@ class BitQuant:
             u = ((w * scale - 0.01).round().clamp_(-8, 7) + 0.01)
         elif self.QuantType == '4bitsym':
             u = ((w * scale - 0.5).round().clamp_(-8, 7) + 0.5)
+        elif self.QuantType == 'sint4':  # plain signed int4 levels -8..7 (with zero) for multiply-based kernels (RV32EMC)
+            u = (w * scale).round().clamp_(-8, 7)
         elif self.QuantType ==  'FP130': # encoding (F1.3.0) : S * ( 2^E3 + 1) -> min 2^0 = 1, max 2^7 = 128
             e = ((w * scale).abs()).log2().floor().clamp_(0, 7)
             u = w.sign()*(e.exp2())
-        elif self.QuantType == 'NF4':
-            # NF4 levels (16 levels for 4 bits)
-            levels = torch.tensor([-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
-                                   0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.723, 1.0], device=w.device)
+        elif self.QuantType in ('NF4', 'NF2'):
+            # normal-float levels (16 for 4 bits, 4 for 2 bits)
+            levels = self.code_levels(w.device)
             u , _ = self.quantize_list(w * scale, levels)
         elif self.QuantType == '5bitsym':
             u = ((w * scale - 0.5).round().clamp_(-16, 15) + 0.5)
@@ -219,6 +360,14 @@ class BitLinear(nn.Linear, BitQuant):
         y: an output tensor with shape [n, k]
         """
         w = self.weight # a weight tensor with shape [d, k]
+
+        if self.act_pow2 and self.QuantType != 'None':
+            x_quant, w_quant = self.quant_forward_pow2(x, w)
+            y = F.linear(x_quant, w_quant)
+            if self.is_output:
+                y = y * self.log_logit_scale.exp()
+            return y
+
         x_norm = self.Normalize(x)
 
         if self.QuantType == 'None':
@@ -242,7 +391,7 @@ class BitLinear(nn.Linear, BitQuant):
         y: a normalized tensor with shape [n, d]
         """
         if self.NormType == 'RMS':
-            y = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True))
+            y = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)).clamp(min=1e-8)  # eps guard: all-zero tokens
             z =x / y
         elif self.NormType == 'Lin':
             y = torch.mean(torch.abs(x), dim=-1, keepdim=True)
@@ -290,6 +439,15 @@ class BitConv2d(nn.Conv2d, BitQuant):
         y: an output tensor with shape [n, k]
         """
         w = self.weight # a weight tensor with shape [d, k]
+
+        if self.act_pow2 and self.QuantType != 'None':
+            # NOTE: this conv path is implemented for symmetry but was not exercised by a trained model in the
+            # accompanying study (all MCU-exact runs used BitLinear); validate before relying on it.
+            # per-image token for the conv (max over C,H,W), matching Normalize's reduction
+            n = x.shape[0]
+            x_quant, w_quant = self.quant_forward_pow2(x.reshape(n, -1), w)
+            return F.conv2d(x_quant.reshape_as(x), w_quant, groups=self.groups, stride=self.stride, padding=self.padding, bias=None)
+
         x_norm = self.Normalize(x)
 
         if self.QuantType == 'None':
@@ -312,7 +470,7 @@ class BitConv2d(nn.Conv2d, BitQuant):
             y: a normalized tensor with shape [n, d]
             """
             if self.NormType == 'RMS':
-                y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True))
+                y = torch.sqrt(torch.mean(x**2, dim=(-2,-1), keepdim=True)).clamp(min=1e-8)
                 z = x / y
             elif self.NormType == 'None':
                 z = x
