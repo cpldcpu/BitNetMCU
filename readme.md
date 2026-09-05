@@ -64,3 +64,7 @@ The data pipeline is split into several Python scripts for flexibility:
 - 7th September 2025 - New CNN architecture based on sequential depthwise separable convolutions allows to reach 99.55% accuracy while still fitting into 16kb Flash and 4kb RAM. [See documentation](docs/documentation_cnn.md) for details.
 - 2nd January 2026 - Add export and inference code for ternary quantization. [See documentation](docs/documentation.md#jan-2-2026-finally-introducing-ternary-158-bit-inference) for details.
 - 6th September 2026 - Optimization of fc models, achieving **99.37%** with Muon, NF4A4 / S4A8, activiation quantization and patch-wise processing. [See documentation](docs/documentation_2026.md).
+
+<div align="center">
+    <img src="docs/images_2026/tradeoff_final.png" width="95%">
+</div>
