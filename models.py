@@ -138,3 +138,105 @@ class CNNMNIST(nn.Module):
         x = self.model(x)
         x = self.classifier(x)
         return x
+
+
+
+
+class PatchMNIST(nn.Module):
+    """
+    Patch front-end + dense head (paper "Everything is a Table", sec. 5.6 / Table 3, extended).
+
+    The 16x16 input is cut into patch_size x patch_size windows (patch_mode='block'; patch_stride < patch_size
+    gives overlapping windows, e.g. 8x8 at stride 4 -> 3x3 = 9 positions) or polyphase views
+    (patch_mode='polyphase', the control that shares weights without locality). Every window is flattened to a
+    token and passed through a stem of 1-3 BitLinear layers (patch_width1 [-> patch_width2 [-> patch_width3]],
+    ReLU between); patch_shared=True uses ONE stem for all windows (a large-kernel convolution expressed with the
+    fc kernel), False gives every window its own stem. The window outputs are concatenated (nblocks * last stem
+    width) and fed to a dense head network_width1 -> network_width2 [-> network_width3] -> num_classes.
+
+    patch_shared_scale=True shares one activation scale/shift per image across the window tokens (act_group) -
+    required for MCU-exact training, where it preserves the relative magnitudes of the windows.
+
+    On the MCU the shared stem is the ordinary fc kernel called once per window with the same weight pointer;
+    per-window quantization falls out of the per-token machinery (each window is a token).
+
+    Reference points (NF4/A4, MCU-exact, 60 epochs): shared 8x8 quadrants 64-32-32, head 96: 25.5k weights, 99.16%;
+    overlap stride 4, 64-32-16, head 64: 16.5k, 99.25%; overlap stride 2, 64-32-8, head 64: 19.8k, 99.37%.
+    """
+    def __init__(self, network_width1=96, network_width2=96, network_width3=0, patch_width1=32, patch_width2=0, patch_width3=0,
+                 patch_mode='block', patch_shared_scale=False, patch_shared=True, patch_size=8, patch_stride=0, QuantType='4bitsym', WScale='PerTensor', NormType='RMS', num_classes: int = 10):
+        super().__init__()
+        assert patch_mode in ('block', 'polyphase')
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride if patch_stride > 0 else patch_size   # stride < size: overlapping windows (block mode only)
+        if self.patch_stride == patch_size:
+            assert 16 % patch_size == 0
+            self.grid = 16 // patch_size                   # blocks per side
+        else:
+            assert patch_mode == 'block' and (16 - patch_size) % self.patch_stride == 0
+            self.grid = (16 - patch_size) // self.patch_stride + 1   # e.g. 8x8 windows at stride 4 -> 3x3 positions
+        self.nblocks = self.grid ** 2                      # 4 for 8x8 patches, 16 for 4x4, 9 for 8x8/stride 4
+        self.patch_width3 = patch_width3
+        self.patch_shared_scale = patch_shared_scale
+        self.patch_shared = patch_shared      # False: every block gets its own stem weights (4x the stem parameters)
+        self.patch_mode = patch_mode
+        self.patch_width1, self.patch_width2 = patch_width1, patch_width2
+        q = dict(QuantType=QuantType, NormType=NormType, WScale=WScale)
+        nb, pin = self.nblocks, patch_size * patch_size
+        if patch_shared:
+            self.stem1 = BitLinear(pin, patch_width1, **q)
+            self.stem2 = BitLinear(patch_width1, patch_width2, **q) if patch_width2 > 0 else None
+            self.stem3 = BitLinear(patch_width2, patch_width3, **q) if patch_width3 > 0 else None
+        else:
+            self.stem1 = nn.ModuleList([BitLinear(pin, patch_width1, **q) for _ in range(nb)])
+            self.stem2 = nn.ModuleList([BitLinear(patch_width1, patch_width2, **q) for _ in range(nb)]) if patch_width2 > 0 else None
+            self.stem3 = nn.ModuleList([BitLinear(patch_width2, patch_width3, **q) for _ in range(nb)]) if patch_width3 > 0 else None
+        if patch_shared_scale:
+            assert patch_shared, "patch_shared_scale needs shared stems (grouped tokens)"
+            # one activation scale / shift per image for the block tokens (see BitQuant.act_group)
+            for st in (self.stem1, self.stem2, self.stem3):
+                if st is not None:
+                    st.act_group = nb
+        stem_out = nb * (patch_width3 if patch_width3 > 0 else patch_width2 if patch_width2 > 0 else patch_width1)
+        self.model = nn.Sequential(
+            BitLinear(stem_out, network_width1, **q), nn.ReLU(),
+            BitLinear(network_width1, network_width2, **q), nn.ReLU())
+        if network_width3 > 0:
+            self.model.add_module("fc3", BitLinear(network_width2, network_width3, **q))
+            self.model.add_module("relu_fc3", nn.ReLU())
+        last = network_width3 if network_width3 > 0 else network_width2
+        self.classifier = BitLinear(last, num_classes, **q)
+
+    def patches(self, x):
+        """x: [N,1,16,16] -> [N*nblocks, patch_size^2] tokens, row-major window order (block-major within an image)."""
+        n, g, ps = x.shape[0], self.grid, self.patch_size
+        if self.patch_mode == 'block' and self.patch_stride != ps:
+            # overlapping windows: unfold -> [N, ps*ps, g*g] -> [N*g*g, ps*ps] (row-major positions)
+            return F.unfold(x, kernel_size=ps, stride=self.patch_stride).transpose(1, 2).reshape(n * g * g, ps * ps)
+        if self.patch_mode == 'block':
+            p = x.reshape(n, 1, g, ps, g, ps).permute(0, 2, 4, 1, 3, 5)      # [N, g, g, 1, ps, ps]
+        else:
+            p = x.reshape(n, 1, ps, g, ps, g).permute(0, 3, 5, 1, 2, 4)      # [N, g, g, 1, ps, ps] stride-g views
+        return p.reshape(n * g * g, ps * ps)
+
+    def forward(self, x):
+        n = x.shape[0]
+        if self.patch_shared:
+            t = F.relu(self.stem1(self.patches(x)))
+            if self.stem2 is not None:
+                t = F.relu(self.stem2(t))
+            if self.stem3 is not None:
+                t = F.relu(self.stem3(t))
+            t = t.reshape(n, -1)
+        else:
+            blocks = self.patches(x).reshape(n, self.nblocks, -1)
+            outs = []
+            for b in range(self.nblocks):
+                tb = F.relu(self.stem1[b](blocks[:, b]))
+                if self.stem2 is not None:
+                    tb = F.relu(self.stem2[b](tb))
+                if self.stem3 is not None:
+                    tb = F.relu(self.stem3[b](tb))
+                outs.append(tb)
+            t = torch.cat(outs, dim=1)
+        return self.classifier(self.model(t))
