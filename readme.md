@@ -6,7 +6,7 @@
 
 The training pipeline is based on PyTorch and should run anywhere. The inference engine is implemented in Ansi-C and can be easily ported to any Microcontroller.
 
-**You can my buildlogs on the project in the `docs/` directory [here](docs/documentation.md) and CNN details [here](docs/documentation_cnn.md).**
+**You can my buildlogs on the project in the `docs/` directory [here](docs/documentation.md) and CNN details [here](docs/documentation_cnn.md). Latest update on [optimize fc here](docs/documentation_2026.md)**.
 **Also see [BitNetMCU blog articles](https://cpldcpu.github.io/tags/bitnetmcu/)**
 
 <div align="center">
@@ -63,3 +63,4 @@ The data pipeline is split into several Python scripts for flexibility:
 - 26th July 2024 -  Added support for NormalFloat4 (NF4) Quantization. [Updated documentation](docs/documentation.md#july-26-2024-normalfloat4-nf4-quantization)
 - 7th September 2025 - New CNN architecture based on sequential depthwise separable convolutions allows to reach 99.55% accuracy while still fitting into 16kb Flash and 4kb RAM. [See documentation](docs/documentation_cnn.md) for details.
 - 2nd January 2026 - Add export and inference code for ternary quantization. [See documentation](docs/documentation.md#jan-2-2026-finally-introducing-ternary-158-bit-inference) for details.
+- 6th September 2026 - Optimization of fc models, achieving **99.37%** with Muon, NF4A4 / S4A8, activiation quantization and patch-wise processing. [See documentation](docs/documentation_2026.md).
