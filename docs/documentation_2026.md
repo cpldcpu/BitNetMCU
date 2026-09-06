@@ -89,14 +89,13 @@ So far, I had not focussed on training with quantized activations. Using a 32 bi
 
 Assuming we have 4 bit activations and also 4 bit weights (W4A4), we can precompute a table of all 16x16 multiplication results and simply perform a table lookup instead of a multiplication. On RV32EC (CH32V003) this is a bit faster than bit wise multiplication.
 
-´´´c
+```c
 for(int i=0; i<8; i++)
     {   
     sum+=multable[*activations++ | (weights&0xF)]
     weights >>= 4;
     }
-
-´´´
+```
 
 A nice aspect of this approach is that we can integrate arbitrary encoding of the weights into the table. For example, [NF4 weights](https://github.com/cpldcpu/BitNetMCU/blob/main/docs/documentation.md#july-26-2024-normalfloat4-nf4-quantization) which try to model the distribution of the weights better than a simple linear quantization. The table is 256 bytes for linear encoding and 512 bytes for NF4 encoding.
 
