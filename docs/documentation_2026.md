@@ -211,13 +211,13 @@ The figure below shows a summary of old and new datapoints.
 
 | Comparison point | Test accuracy | Weight storage, approximately | Inference time | Evidence |
 |---|---:|---:|---:|---|
-| Original 12k FC, 4bitsym | 99.02% | 12.3 KiB | 11.01 ms | Historical MCU measurement |
-| Dense NF4/A4, reciprocal floor | 99.07 ± 0.04% | 12.3 KiB | ~11 ms | Integer-emulator agreement; estimated time |
-| Overlap stride 4, NF4/A4 | 99.25 ± 0.04% | 8.1 KiB | ~16 ms | Integer-emulator agreement; estimated time |
-| Overlap stride 2, NF4/A4 | **99.37 ± 0.03%** | 9.7 KiB | ~33 ms | Integer-emulator agreement; estimated time |
-| Wider stride 4, 2bitsym/A8 | 99.25 ± 0.06% | 7.8 KiB | ~29 ms | Integer-emulator agreement; estimated time |
-| Original 32-wide CNN | 99.28% | 7.3 KiB | 29.89 ms | Historical MCU measurement |
-| Original 64-wide CNN | 99.55% | 11.0 KiB | 57.01 ms | Historical MCU measurement |
+| Original 12k FC, 4bitsym | 99.02% | 12.3 KiB | 11.01 ms |  MCU measurement |
+| Dense NF4/A4, reciprocal floor | 99.07 ± 0.04% | 12.3 KiB | ~11 ms |  estimated time |
+| Overlap stride 4, NF4/A4 | 99.25 ± 0.04% | 8.1 KiB | ~16 ms |  estimated time |
+| Overlap stride 2, NF4/A4 | **99.37 ± 0.03%** | 9.7 KiB | ~33 ms | ; estimated time |
+| Wider stride 4, 2bitsym/A8 | 99.25 ± 0.06% | 7.8 KiB | ~29 ms |  estimated time |
+| Original 32-wide CNN | 99.28% | 7.3 KiB | 29.89 ms | MCU measurement |
+| Original 64-wide CNN | 99.55% | 11.0 KiB | 57.01 ms | MCU measurement |
 
 Key findings:
 
