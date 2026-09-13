@@ -197,7 +197,7 @@ The experiment below shows models of similar total bit size at different bits pe
 | W5, 5bitsym | 28-14 / 56 | 12.9k | 30k | 13 ms | 99.18 ± 0.02% | 0.024 |
 | W8, 8bit | 18-9 / 48 | 8.0k | 18.5k | 8 ms | 98.86 ± 0.05% | 0.038 |
 
-Consistent with earlier observations, we get almost the same accuracy for the W4 model with 16.5k weights and the W2 model with twice the number of weights. The higher number of 2-bit weights is compensated by the lower capacity per weight.
+Consistent with earlier observations, we get almost the same accuracy for the W4 model with 16.5k weights and the W2 model with twice the number of weights. The lower capacity per 2-bit weight is compensated by the higher number of weights.
 
 It appears once again that 4 bpw represents an optimum. Going to lower bpw (e.g. 2, 3, 1.58, etc.) requires more weights in the model to compensate for the capacity loss, which will increase inference time.
 
